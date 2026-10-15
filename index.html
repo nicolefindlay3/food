@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#fdf8f5">
+<title>Use It Up</title>
+<style>
+:root{--bg:#fdf8f5;--card:#fff;--ink:#3a3535;--mute:#9a8f8f;--line:#f0e6e1;--accent:#e07a5f;--sage:#6fa98c;--warn:#fff1d9;--warnink:#a3640a;--chip:#f3ecf7}
+@media(prefers-color-scheme:dark){:root{--bg:#1c1a1b;--card:#272425;--ink:#f3eded;--mute:#a79c9c;--line:#3a3536;--accent:#ef8c72;--sage:#7fc0a0;--warn:#40331a;--warnink:#f2c36b;--chip:#322d38}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,"Segoe UI",Roboto,system-ui,sans-serif}
+body{max-width:640px;margin:0 auto;padding:calc(14px + env(safe-area-inset-top,0px)) 16px 100px}
+.top{display:flex;align-items:center;justify-content:space-between}
+h1{font-family:Georgia,serif;font-size:28px;margin:6px 0 2px}
+.gear{background:var(--card);border:1px solid var(--line);border-radius:50%;width:40px;height:40px;font-size:18px;color:var(--ink)}
+.sub{color:var(--mute);font-size:14px;margin-bottom:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px;margin-bottom:12px;box-shadow:0 2px 8px #0000000a}
+.nav{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);display:flex;padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));z-index:5}
+.nav button{flex:1;background:none;border:0;color:var(--mute);font-size:12px;padding:6px;font-weight:600}
+.nav button b{display:block;font-size:20px}.nav button.on{color:var(--accent)}
+button{font:inherit;cursor:pointer}
+.btn{background:var(--accent);color:#fff;border:0;border-radius:14px;padding:13px 16px;font-weight:700;width:100%;font-size:16px}
+.btn.alt{background:var(--chip);color:var(--ink)}
+.chips{display:flex;gap:6px;overflow-x:auto;margin-bottom:12px}
+.chip{border:0;background:var(--chip);color:var(--ink);padding:8px 14px;border-radius:99px;font-size:14px;white-space:nowrap}
+.chip.on{background:var(--accent);color:#fff;font-weight:700}
+.row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}.row:last-child{border:0}
+.row .n{flex:1;min-width:0}.row .n div{font-weight:600;overflow-wrap:anywhere}.row small{color:var(--mute)}
+.q{display:flex;align-items:center;gap:6px}
+.q button{width:36px;height:36px;border-radius:50%;border:0;background:var(--chip);color:var(--ink);font-size:20px}
+.q span{min-width:24px;text-align:center;font-weight:700}
+.tag{background:var(--warn);color:var(--warnink);font-size:11px;font-weight:700;border-radius:6px;padding:2px 6px;margin-left:6px}
+input{font:inherit;width:100%;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);margin:6px 0 10px}
+label{font-size:13px;color:var(--mute);font-weight:600}
+.stepper{display:flex;align-items:center;gap:14px;margin:6px 0 12px}
+.stepper button{width:44px;height:44px;border-radius:50%;border:0;background:var(--chip);color:var(--ink);font-size:22px}
+.stepper span{font-size:22px;font-weight:700;min-width:30px;text-align:center}
+.cs{font:inherit;font-size:12px;border:0;background:var(--chip);color:var(--ink);border-radius:8px;padding:3px 4px;margin-top:5px;max-width:100%}
+.wrap{flex-wrap:wrap;overflow:visible}
+.empty{text-align:center;color:var(--mute);padding:30px 10px}
+.rec h3{margin:0 0 4px;font-family:Georgia,serif}.rec .m{font-size:13px;color:var(--mute)}.ok{color:var(--sage);font-weight:700}
+.rec p{font-size:14px;margin:8px 0 10px;line-height:1.45}
+.hint{font-size:13px;color:var(--sage);font-weight:600;margin-bottom:6px}
+.two{display:flex;gap:8px}.two input{margin:0}.two button{width:auto;padding:0 18px}
+#scan{position:fixed;inset:0;background:#000;z-index:20;display:none;flex-direction:column}
+#scan video{flex:1;width:100%;object-fit:cover;min-height:0}
+#scan .bar{padding:14px 16px calc(14px + env(safe-area-inset-bottom,0px));background:#111;color:#fff;text-align:center;font-size:14px}
+#scan .frame{position:absolute;left:12%;right:12%;top:30%;height:22%;border:3px solid #fff8;border-radius:14px}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:92px;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:99px;font-size:14px;display:none;z-index:30;max-width:90%}
+</style></head><body>
+<div class="top"><h1>Use It Up</h1><button class="gear" onclick="setHH()" aria-label="Settings">⚙️</button></div>
+<div class="sub" id="sub"></div>
+<div id="app"></div>
+<nav class="nav" id="nav"></nav>
+<div id="scan"><video id="vid" playsinline muted></video><div class="frame"></div><div class="bar"><div id="smsg">Point at a barcode</div><button class="btn alt" style="margin-top:10px" onclick="stopScan()">Cancel</button></div></div>
+<div id="toast"></div>
+<script>
+/* ====== PASTE YOUR SUPABASE DETAILS HERE (Project Settings > API) ====== */
+const SB_URL="https://nvvqyjsmbgsebcjdinrp.supabase.co";   // e.g. "https://abcdxyz.supabase.co"
+const SB_KEY="sb_publishable_6KNNQUXlvvl1XXTK9nTC_w_VgZxnodr";   // the "anon public" key
+/* ====================================================================== */
+const LOCS=["Freezer","Fridge","Pantry"];
+const CATS=["Meat & fish","Dairy & eggs","Fruit & veg","Bread & bakery","Pasta, rice & grains","Tins & jars","Condiments","Snacks & sweets","Drinks","Other"];
+const KW=[["Condiments","sauce|ketchup|mayo|mayonnaise|mustard|dressing|oil|vinegar|soy|stock|spice|salt|pepper|seasoning|paste|curry|syrup|relish|marinade|gravy"],
+["Tins & jars","tin|tinned|canned|baked bean|beans|tuna|chickpea|passata|soup|coconut|jar|pickle|jam|spread|peanut butter|vegemite|honey"],
+["Snacks & sweets","chip|biscuit|cracker|chocolate|lolly|snack|popcorn|ice cream|muesli bar|bar"],
+["Drinks","juice|water|cordial|soda|coffee|tea|cola|drink"],
+["Bread & bakery","bread|bun|wrap|tortilla|roll|muffin|crumpet|pita|bagel|cake|pastry"],
+["Pasta, rice & grains","pasta|spaghetti|macaroni|noodle|rice|flour|oat|cereal|couscous|quinoa|lentil|breadcrumb"],
+["Meat & fish","chicken|beef|mince|pork|lamb|sausage|bacon|ham|steak|fish|salmon|prawn|schnitzel|patty|turkey|meatball"],
+["Dairy & eggs","milk|cheese|yoghurt|yogurt|butter|cream|egg|custard|margarine"],
+["Fruit & veg","apple|banana|orange|berry|berries|grape|lemon|lime|mango|fruit|veg|pea|corn|carrot|potato|pumpkin|onion|garlic|broccoli|cauliflower|spinach|lettuce|salad|capsicum|zucchini|tomato|cucumber|mushroom|avocado"]]
+.map(([c,k])=>[c,new RegExp("\\b("+k+")s?\\b")]);
+function guess(n){n=n.toLowerCase();for(const[c,r]of KW)if(r.test(n))return c;return"Other"}
+const catOf=i=>i.cat||guess(i.name);
+let cfilter="All";
+let S={items:[],codes:{}},HH=localStorage.getItem("uiu_hh")||"",sync="local",pend=0,tab="stock",filter="All",form=null;
+try{S=Object.assign(S,JSON.parse(localStorage.getItem("uiu")||"{}"))}catch(e){}
+const $=s=>document.querySelector(s),ON=()=>SB_URL&&SB_KEY&&HH,enc=encodeURIComponent;
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function toast(t){const e=$("#toast");e.textContent=t;e.style.display="block";clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.display="none",2400)}
+function save(){try{localStorage.setItem("uiu",JSON.stringify(S))}catch(e){}}
+async function sb(path,o={}){const r=await fetch(SB_URL+"/rest/v1/"+path,{...o,headers:{apikey:SB_KEY,...(SB_KEY.startsWith("eyJ")?{Authorization:"Bearer "+SB_KEY}:{}),"Content-Type":"application/json",...(o.headers||{})}});
+  if(!r.ok)throw new Error(r.status);const t=await r.text();return t?JSON.parse(t):null}
+function w(p){pend++;return p.catch(()=>{sync="error";render()}).finally(()=>pend--)}
+const UP={method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=minimal"}};
+function put(it){save();ON()&&w(sb("pantry_items?on_conflict=id",{...UP,body:JSON.stringify({...it,household:HH})}))}
+function del(id){save();ON()&&w(sb("pantry_items?id=eq."+enc(id)+"&household=eq."+enc(HH),{method:"DELETE"}))}
+function putCode(c,n){save();ON()&&w(sb("pantry_codes?on_conflict=household,code",{...UP,body:JSON.stringify({household:HH,code:c,name:n})}))}
+async function pull(){
+  if(!ON()||pend)return;
+  try{const [a,b]=await Promise.all([sb("pantry_items?household=eq."+enc(HH)+"&order=added.asc"),sb("pantry_codes?household=eq."+enc(HH))]);
+    const mk="uiu_mig_"+HH;
+    if(!a.length&&S.items.length&&!localStorage.getItem(mk)){localStorage.setItem(mk,1);S.items.forEach(put);Object.entries(S.codes).forEach(([c,n])=>putCode(c,n));sync="live";render();return}
+    localStorage.setItem(mk,1);
+    S.items=a.map(({household,...r})=>r);S.codes={};b.forEach(c=>S.codes[c.code]=c.name);sync="live";save();if(tab!="add")render()}
+  catch(e){sync="error";render()}
+}
+function setHH(){
+  if(!SB_URL||!SB_KEY){alert("Sync isn't set up yet. Add your Supabase URL and anon key at the top of this file.");return}
+  const v=prompt("Household code — use the same code on every phone that should share this pantry:",HH);
+  if(v&&v.trim()){HH=v.trim().toLowerCase();localStorage.setItem("uiu_hh",HH);pull();toast("Syncing as “"+HH+"”")}
+}
+function age(ts){const d=Math.floor((Date.now()-ts)/864e5);return d<1?"today":d<31?d+"d ago":Math.floor(d/30)+"mo ago"}
+const old=it=>Date.now()-it.added>60*864e5;
+function addItem(name,loc,n,code,cat){
+  name=name.trim();if(!name)return;
+  let it=S.items.find(i=>i.name.toLowerCase()===name.toLowerCase()&&i.loc===loc);
+  if(it){it.qty+=n;if(!it.cat)it.cat=cat||guess(name)}else{it={cat:cat||guess(name),id:"i"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),name,loc,qty:n,added:Date.now()};S.items.push(it)}
+  put(it);if(code){S.codes[code]=name;putCode(code,name)}
+}
+function setCat(id,c){const it=S.items.find(i=>i.id==id);if(!it)return;it.cat=c;put(it);render()}
+function change(id,d,q){const it=S.items.find(i=>i.id==id);if(!it)return;it.qty+=d;
+  if(it.qty<=0){S.items=S.items.filter(i=>i.id!=id);del(id);if(!q)toast(it.name+" used up ✓")}else put(it);if(!q)render()}
+function render(){
+  const st=!SB_URL?"this device only (sync not set up)":!HH?"tap ⚙️ to turn on sync":sync=="live"?"☁️ synced":sync=="error"?"offline — will retry":"connecting…";
+  $("#sub").textContent=(S.items.length?S.items.reduce((a,i)=>a+i.qty,0)+" items · "+S.items.filter(old).length+" sitting 2+ months":"Know what you have. Cook what you've got.")+" · "+st;
+  $("#nav").innerHTML=[["stock","🧊","Stock"],["add","➕","Add"],["recipes","🍳","Cook"]].map(([k,e,l])=>`<button class="${tab==k?"on":""}" onclick="go('${k}')"><b>${e}</b>${l}</button>`).join("");
+  $("#app").innerHTML=tab=="stock"?vStock():tab=="add"?vAdd():vRec();
+}
+function go(t){tab=t;if(t=="add"&&!form)form={name:"",loc:"Pantry",n:1,code:"",hint:""};render();scrollTo(0,0)}
+function vStock(){
+  if(!S.items.length)return`<div class="empty">Nothing here yet.<br>Tap Add to scan or enter your first item.</div>`;
+  const cats=[...new Set(S.items.map(catOf))].sort();
+  if(cfilter!="All"&&!cats.includes(cfilter))cfilter="All";
+  const list=S.items.filter(i=>(filter=="All"||i.loc==filter)&&(cfilter=="All"||catOf(i)==cfilter)).sort((a,b)=>a.added-b.added);
+  const row=(arr,cur,v)=>`<div class="chips">${arr.map(l=>`<button class="chip ${cur==l?"on":""}" onclick="${v}='${l.replace(/'/g,"\\'")}';render()">${l}</button>`).join("")}</div>`;
+  return row(["All",...LOCS],filter,"filter")+row(["All",...cats],cfilter,"cfilter")+`
+  <div class="card">${list.length?list.map(i=>`<div class="row"><div class="n"><div>${esc(i.name)}${old(i)?'<span class="tag">use soon</span>':""}</div><small>${i.loc} · added ${age(i.added)}</small><br><select class="cs" onchange="setCat('${i.id}',this.value)">${CATS.map(c=>`<option ${c==catOf(i)?"selected":""}>${c}</option>`).join("")}</select></div><div class="q"><button onclick="change('${i.id}',-1)">−</button><span>${i.qty}</span><button onclick="change('${i.id}',1)">+</button></div></div>`).join(""):`<div class="empty">Nothing here.</div>`}</div>
+  <div class="sub" style="text-align:center">Oldest first. Tap − when you use one; at 0 it's removed.</div>`;
+}
+function vAdd(){
+  return`<button class="btn" onclick="startScan()">📷 Scan barcode</button>
+  <div class="card two" style="margin-top:10px;padding:10px"><input id="bc" inputmode="numeric" placeholder="…or type a barcode number"><button class="btn alt" onclick="found($('#bc').value.trim())">Look up</button></div>
+  <div class="card">
+  ${form.hint?`<div class="hint">${form.hint}</div>`:""}
+  <label>${form.code?"Barcode "+esc(form.code):"Item name"}</label>
+  <input id="fn" value="${esc(form.name)}" placeholder="e.g. Chicken thighs" oninput="form.name=this.value" autocomplete="off">
+  <label>How many</label>
+  <div class="stepper"><button onclick="form.n=Math.max(1,form.n-1);render()">−</button><span>${form.n}</span><button onclick="form.n++;render()">+</button></div>
+  <label>Where is it</label>
+  <div class="chips" style="margin-top:6px">${LOCS.map(l=>`<button class="chip ${form.loc==l?"on":""}" onclick="form.loc='${l}';render()">${l}</button>`).join("")}</div>
+  <label>Category</label>
+  <div class="chips wrap" style="margin-top:6px"><button class="chip ${!form.cat?"on":""}" onclick="form.cat='';render()">Auto</button>${CATS.map((c,k)=>`<button class="chip ${form.cat==c?"on":""}" onclick="form.cat=CATS[${k}];render()">${c}</button>`).join("")}</div>
+  <button class="btn" onclick="submitAdd()">Add to stock</button></div>`;
+}
+function submitAdd(){
+  if(!form.name.trim()){toast("Give it a name first");return}
+  addItem(form.name,form.loc,form.n,form.code,form.cat);toast("Added "+form.name);
+  form={name:"",loc:form.loc,n:1,code:"",hint:""};render();
+}
+/* Barcode lookup: your saved names first, then Open Food Facts */
+async function off(code){
+  try{const r=await fetch("https://world.openfoodfacts.org/api/v2/product/"+enc(code)+".json?fields=product_name");
+    const j=await r.json();if(j.status==1&&j.product&&j.product.product_name)return j.product.product_name.trim()}catch(e){}
+  return"";
+}
+async function found(code){
+  if(!code)return;stopScan();if(navigator.vibrate)navigator.vibrate(60);
+  const loc=(form&&form.loc)||"Pantry";
+  if(S.codes[code]){addItem(S.codes[code],loc,1,code);toast("+1 "+S.codes[code]);tab="stock";render();return}
+  toast("Looking it up…");
+  const name=await off(code);
+  form={name,loc,n:1,code,hint:name?"✓ Found it — edit the name if you like":"Not in the database — name it once and it's saved"};
+  tab="add";render();
+}
+/* Scanner */
+let stream=null,reader=null,live=false;
+function loadZX(){return new Promise((res,rej)=>{if(window.ZXing)return res();const s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js";s.onload=res;s.onerror=rej;document.head.appendChild(s)})}
+async function startScan(){
+  $("#scan").style.display="flex";live=true;$("#smsg").textContent="Starting camera…";
+  try{
+    if("BarcodeDetector" in window){
+      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
+      const v=$("#vid");v.srcObject=stream;await v.play();$("#smsg").textContent="Point at a barcode";
+      const det=new BarcodeDetector({formats:["ean_13","ean_8","upc_a","upc_e","code_128"]});
+      (async function loop(){if(!live)return;try{const r=await det.detect(v);if(r.length){found(r[0].rawValue);return}}catch(e){}setTimeout(loop,250)})();
+    }else{
+      await loadZX();reader=new ZXing.BrowserMultiFormatReader();$("#smsg").textContent="Point at a barcode";
+      reader.decodeFromVideoDevice(undefined,"vid",r=>{if(r&&live)found(r.getText())});
+    }
+  }catch(e){stopScan();toast("Camera unavailable — type the barcode instead")}
+}
+function stopScan(){live=false;$("#scan").style.display="none";if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}if(reader){try{reader.reset()}catch(e){}reader=null}}
+/* Recipes */
+const R=[
+["Fried rice","20 min",[["rice"],["egg"],["pea","corn","carrot","veg","bean"]],"Fry cooked rice hot with veg, push aside, scramble eggs in, splash of soy, stir together."],
+["Spaghetti bolognese","35 min",[["pasta","spaghetti"],["mince","beef"],["tomato","passata"]],"Brown mince, add tomato and any veg, simmer 20 min, toss through cooked pasta."],
+["Chicken stir-fry","20 min",[["chicken"],["broccoli","capsicum","carrot","veg","bean","pea","corn"],["rice","noodle"]],"Sear sliced chicken, add veg, finish with soy or sweet chilli, serve on rice or noodles."],
+["Tuna pasta bake","30 min",[["tuna"],["pasta"],["cheese","tomato"]],"Mix cooked pasta, tuna, tomato or white sauce, top with cheese, bake 15–20 min at 200°C."],
+["Cheesy omelette","10 min",[["egg"],["cheese"]],"Whisk eggs, cook gently, add cheese and any leftover veg, fold."],
+["Veggie curry","30 min",[["curry","paste"],["coconut","tomato"],["potato","pumpkin","chickpea","lentil","cauliflower","pea"],["rice"]],"Fry paste, add coconut milk or tomato and veg, simmer until soft, serve with rice."],
+["Chilli con carne","40 min",[["mince","beef"],["bean"],["tomato","passata"]],"Brown mince, add beans, tomato and chilli powder, simmer 25 min."],
+["Sausages & mash","35 min",[["sausage"],["potato"]],"Cook sausages, boil and mash potato with butter and milk, add peas or gravy."],
+["Tacos","20 min",[["mince","chicken","beef"],["taco","tortilla","wrap"]],"Cook meat with taco seasoning, fill shells or wraps, add cheese and veg."],
+["Quesadillas","15 min",[["tortilla","wrap"],["cheese"],["bean","chicken","corn"]],"Fill a wrap with cheese and filling, fold, pan-fry both sides until crisp."],
+["Simple tomato pasta","20 min",[["pasta"],["tomato","passata"]],"Simmer tomato with garlic or onion, toss with pasta, add veg or cheese."],
+["Lentil soup","35 min",[["lentil"],["onion","carrot","tomato","stock"]],"Simmer lentils with chopped veg and stock until soft. Blend half for body."],
+["Fish & chip tray","30 min",[["fish"],["potato","chip"]],"Bake chips and fish on a tray at 220°C until crisp, serve with peas."],
+["Pumpkin soup","35 min",[["pumpkin"],["stock","onion","potato"]],"Roast or simmer pumpkin with onion and stock, blend smooth."],
+["French toast","10 min",[["egg"],["bread"],["milk"]],"Whisk egg and milk, soak bread, fry golden."],
+["Pancakes","20 min",[["flour"],["egg"],["milk"]],"Whisk 1 cup flour, 1 egg, 1 cup milk, fry spoonfuls until bubbly, flip."],
+["Loaded baked potato","50 min",[["potato"],["cheese","bean","tuna"]],"Bake potatoes until soft, split and top with cheese, beans or tuna."],
+["Chicken soup","40 min",[["chicken"],["carrot","veg","onion","potato","noodle","rice"]],"Simmer chicken with veg and stock, add noodles or rice at the end."],
+["Mac & cheese","25 min",[["macaroni","pasta"],["cheese"],["milk"]],"Make a quick cheese sauce with milk, stir through cooked pasta, add peas."],
+["Burgers","25 min",[["mince","beef"],["bun","bread"]],"Shape mince into patties, pan-fry, serve in buns with cheese and salad."],
+["Pizza wraps","15 min",[["wrap","tortilla","bread"],["cheese"],["tomato","passata"]],"Spread tomato on a wrap, add cheese and toppings, bake 8–10 min at 220°C."],
+["Beans on toast","5 min",[["bean"],["bread"]],"Heat beans, pile onto toast, add cheese or an egg."],
+["Minestrone","40 min",[["pasta","bean","chickpea"],["tomato"],["veg","carrot","pea","corn","potato"]],"Simmer veg and tomato in stock, add beans and small pasta for the last 10 min."],
+["Corn fritters","20 min",[["corn","zucchini","pea","potato"],["egg"],["flour"]],"Mix veg, egg and flour into a thick batter, fry spoonfuls until golden."]
+];
+const has=kw=>S.items.filter(i=>i.qty>0&&i.name.toLowerCase().includes(kw));
+function vRec(){
+  if(!S.items.length)return`<div class="empty">Add some food first and I'll suggest what to cook.</div>`;
+  const out=R.map(r=>{let got=0,oldHit=0,miss=[],use=[];
+    r[2].forEach(g=>{let f=null;for(const k of g){const m=has(k);if(m.length){f=m.sort((a,b)=>a.added-b.added)[0];break}}
+      if(f){got++;use.push(f);if(old(f))oldHit++}else miss.push(g[0])});
+    return{r,got,tot:r[2].length,oldHit,miss,use}}).filter(x=>x.got>=2&&x.got/x.tot>=.6)
+    .sort((a,b)=>(b.got/b.tot)-(a.got/a.tot)||b.oldHit-a.oldHit||Math.min(...a.use.map(u=>u.added))-Math.min(...b.use.map(u=>u.added)));
+  window._out=out;
+  if(!out.length)return`<div class="empty">Nothing matches yet. Add more everyday ingredients.</div>`;
+  return`<div class="sub">Ranked by what you can make now, then by how long ingredients have been waiting.</div>`+out.map((x,i)=>`<div class="card rec"><h3>${x.r[0]}</h3>
+  <div class="m">${x.r[1]} · <span class="ok">${x.got}/${x.tot} ingredients</span>${x.oldHit?` · uses ${x.oldHit} older item${x.oldHit>1?"s":""}`:""}</div>
+  <p>${x.r[3]}</p><div class="m">Using: ${x.use.map(u=>esc(u.name)).join(", ")}${x.miss.length?"<br>Missing: "+x.miss.join(", "):""}</div>
+  <button class="btn alt" style="margin-top:10px" onclick="cooked(${i})">I cooked this — use 1 of each</button></div>`).join("");
+}
+function cooked(i){const x=window._out[i];if(!x)return;x.use.forEach(u=>change(u.id,-1,1));toast("Nice — stock updated");render()}
+render();pull();
+setInterval(pull,20000);document.addEventListener("visibilitychange",()=>{if(!document.hidden)pull()});
+</script></body></html>
