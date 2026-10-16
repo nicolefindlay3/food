@@ -61,7 +61,7 @@ label{font-size:13px;color:var(--mute);font-weight:600}
 const SB_URL="https://nvvqyjsmbgsebcjdinrp.supabase.co";   // e.g. "https://abcdxyz.supabase.co"
 const SB_KEY="sb_publishable_6KNNQUXlvvl1XXTK9nTC_w_VgZxnodr";   // the "anon public" key
 /* ====================================================================== */
-const VER="v5";
+const VER="v6";
 const LOCS=["Freezer","Fridge","Pantry"];
 const CATS=["Meat & fish","Dairy & eggs","Fruit & veg","Bread & bakery","Pasta, rice & grains","Tins & jars","Condiments","Snacks & sweets","Drinks","Other"];
 const KW=[["Condiments","sauce|ketchup|mayo|mayonnaise|mustard|dressing|oil|vinegar|soy|stock|spice|salt|pepper|seasoning|paste|curry|syrup|relish|marinade|gravy"],
@@ -77,7 +77,7 @@ const KW=[["Condiments","sauce|ketchup|mayo|mayonnaise|mustard|dressing|oil|vine
 function guess(n){n=n.toLowerCase();for(const[c,r]of KW)if(r.test(n))return c;return"Other"}
 const catOf=i=>i.cat||guess(i.name);
 let cfilter="All";
-let S={items:[],codes:{}},HH=localStorage.getItem("uiu_hh")||"",sync="local",pend=0,tab="stock",filter="All",form=null;
+let S={items:[],codes:{}},HH=localStorage.getItem("uiu_hh")||"findlay",sync="local",pend=0,tab="stock",filter="All",form=null;
 try{S=Object.assign(S,JSON.parse(localStorage.getItem("uiu")||"{}"))}catch(e){}
 const $=s=>document.querySelector(s),ON=()=>SB_URL&&SB_KEY&&HH,enc=encodeURIComponent;
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
