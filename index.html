@@ -61,7 +61,7 @@ label{font-size:13px;color:var(--mute);font-weight:600}
 const SB_URL="https://nvvqyjsmbgsebcjdinrp.supabase.co";   // e.g. "https://abcdxyz.supabase.co"
 const SB_KEY="sb_publishable_6KNNQUXlvvl1XXTK9nTC_w_VgZxnodr";   // the "anon public" key
 /* ====================================================================== */
-const VER="v9";
+const VER="v10";
 const LOCS=["Freezer","Fridge","Pantry"];
 const CATS=["Meat & fish","Dairy & eggs","Fruit & veg","Bread & bakery","Pasta, rice & grains","Tins & jars","Condiments","Snacks & sweets","Drinks","Other"];
 const KW=[["Condiments","sauce|ketchup|mayo|mayonnaise|mustard|dressing|oil|vinegar|soy|stock|spice|salt|pepper|seasoning|paste|curry|syrup|relish|marinade|gravy"],
@@ -77,7 +77,7 @@ const KW=[["Condiments","sauce|ketchup|mayo|mayonnaise|mustard|dressing|oil|vine
 function guess(n){n=n.toLowerCase();for(const[c,r]of KW)if(r.test(n))return c;return"Other"}
 const catOf=i=>i.cat||guess(i.name);
 let cfilter="All",last=null;
-let S={items:[],codes:{}},HH=localStorage.getItem("uiu_hh")||"findlay",sync="local",pend=0,tab="stock",filter="All",form=null;
+let S={items:[],codes:{}},HH=localStorage.getItem("uiu_hh")||"findlay",sync="local",pend=0,tab="stock",filter="All",draft=null;
 try{S=Object.assign(S,JSON.parse(localStorage.getItem("uiu")||"{}"))}catch(e){}
 const $=s=>document.querySelector(s),ON=()=>SB_URL&&SB_KEY&&HH,enc=encodeURIComponent;
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -121,7 +121,7 @@ function render(){
   $("#nav").innerHTML=[["stock","🧊","Stock"],["add","➕","Add"],["recipes","🍳","Cook"]].map(([k,e,l])=>`<button class="${tab==k?"on":""}" onclick="go('${k}')"><b>${e}</b>${l}</button>`).join("");
   $("#app").innerHTML=tab=="stock"?vStock():tab=="add"?vAdd():vRec();
 }
-function go(t){tab=t;if(t=="add"&&!form)form={name:"",loc:"Pantry",n:1,code:"",hint:""};render();scrollTo(0,0)}
+function go(t){tab=t;if(t=="add"&&!draft)draft={name:"",loc:"Pantry",n:1,code:"",hint:""};render();scrollTo(0,0)}
 function vStock(){
   if(!S.items.length)return`<div class="empty">Nothing here yet.<br>Tap Add to scan or enter your first item.</div>`;
   const cats=[...new Set(S.items.map(catOf))].sort();
@@ -139,22 +139,22 @@ function vAdd(){
   return lastCard()+`<button class="btn" onclick="startScan()">📷 Scan barcode</button>
   <div class="card two" style="margin-top:10px;padding:10px"><input id="bc" inputmode="numeric" placeholder="…or type a barcode number"><button class="btn alt" onclick="found($('#bc').value.trim())">Look up</button></div>
   <div class="card">
-  ${form.hint?`<div class="hint">${form.hint}</div>`:""}
-  <label>${form.code?"Barcode "+esc(form.code):"Item name"}</label>
-  <input id="fn" value="${esc(form.name)}" placeholder="e.g. Chicken thighs" oninput="form.name=this.value" onchange="form.name=this.value" onblur="form.name=this.value" autocomplete="off">
+  ${draft.hint?`<div class="hint">${draft.hint}</div>`:""}
+  <label>${draft.code?"Barcode "+esc(draft.code):"Item name"}</label>
+  <input id="fn" value="${esc(draft.name)}" placeholder="e.g. Chicken thighs" oninput="draft.name=this.value" onchange="draft.name=this.value" onblur="draft.name=this.value" autocomplete="off">
   <label>How many</label>
-  <div class="stepper"><button onclick="form.n=Math.max(1,form.n-1);render()">−</button><span>${form.n}</span><button onclick="form.n++;render()">+</button></div>
+  <div class="stepper"><button onclick="draft.n=Math.max(1,draft.n-1);render()">−</button><span>${draft.n}</span><button onclick="draft.n++;render()">+</button></div>
   <label>Where is it</label>
-  <div class="chips" style="margin-top:6px">${LOCS.map(l=>`<button class="chip ${form.loc==l?"on":""}" onclick="form.loc='${l}';render()">${l}</button>`).join("")}</div>
+  <div class="chips" style="margin-top:6px">${LOCS.map(l=>`<button class="chip ${draft.loc==l?"on":""}" onclick="draft.loc='${l}';render()">${l}</button>`).join("")}</div>
   <label>Category</label>
-  <div class="chips wrap" style="margin-top:6px"><button class="chip ${!form.cat?"on":""}" onclick="form.cat='';render()">Auto</button>${CATS.map((c,k)=>`<button class="chip ${form.cat==c?"on":""}" onclick="form.cat=CATS[${k}];render()">${c}</button>`).join("")}</div>
+  <div class="chips wrap" style="margin-top:6px"><button class="chip ${!draft.cat?"on":""}" onclick="draft.cat='';render()">Auto</button>${CATS.map((c,k)=>`<button class="chip ${draft.cat==c?"on":""}" onclick="draft.cat=CATS[${k}];render()">${c}</button>`).join("")}</div>
   <button class="btn" onclick="submitAdd()">Add to stock</button></div>`;
 }
 function submitAdd(){
-  const fe=$("#fn");if(fe)form.name=fe.value;
-  if(!form.name.trim()){toast("Give it a name first");return}
-  addItem(form.name,form.loc,form.n,form.code,form.cat);toast("Added "+form.name);
-  form={name:"",loc:form.loc,n:1,code:"",hint:""};render();
+  const fe=$("#fn");if(fe)draft.name=fe.value;
+  if(!draft.name.trim()){toast("Give it a name first");return}
+  addItem(draft.name,draft.loc,draft.n,draft.code,draft.cat);toast("Added "+draft.name);
+  draft={name:"",loc:draft.loc,n:1,code:"",hint:""};render();
 }
 /* Barcode lookup: your saved names first, then Open Food Facts */
 async function off(code){
@@ -164,11 +164,11 @@ async function off(code){
 }
 async function found(code){
   if(!code)return;stopScan();if(navigator.vibrate)navigator.vibrate(60);
-  const loc=(form&&form.loc)||"Pantry";
+  const loc=(draft&&draft.loc)||"Pantry";
   let name=S.codes[code];
   if(!name){toast("Looking it up…");name=await off(code)}
-  if(name){const it=addItem(name,loc,1,code);last=it.id;form={name:"",loc,n:1,code:"",cat:"",hint:""};tab="add";render();scrollTo(0,0);return}
-  form={name:"",loc,n:1,code,cat:"",hint:"Not in the database — name it once and it's saved"};
+  if(name){const it=addItem(name,loc,1,code);last=it.id;draft={name:"",loc,n:1,code:"",cat:"",hint:""};tab="add";render();scrollTo(0,0);return}
+  draft={name:"",loc,n:1,code,cat:"",hint:"Not in the database — name it once and it's saved"};
   tab="add";render();
 }
 /* Scanner */
