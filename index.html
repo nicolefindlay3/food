@@ -53,13 +53,15 @@ label{font-size:13px;color:var(--mute);font-weight:600}
 <div class="sub" id="sub"></div>
 <div id="app"></div>
 <nav class="nav" id="nav"></nav>
-<div id="scan"><video id="vid" playsinline muted></video><div class="frame"></div><div class="bar"><div id="smsg">Point at a barcode</div><button class="btn alt" style="margin-top:10px" onclick="stopScan()">Cancel</button></div></div>
+<div id="scan"><video id="vid" playsinline muted></video><div class="frame"></div><div class="bar"><div id="smsg">Point at a barcode</div><button class="btn" style="margin-top:10px" onclick="$('#bp').click()">📸 Take a photo of the barcode instead</button><button class="btn alt" style="margin-top:8px" onclick="stopScan()">Cancel</button></div></div>
 <div id="toast"></div>
+<input id="bp" type="file" accept="image/*" capture="environment" hidden onchange="scanPhoto(this)">
 <script>
 /* ====== PASTE YOUR SUPABASE DETAILS HERE (Project Settings > API) ====== */
 const SB_URL="https://nvvqyjsmbgsebcjdinrp.supabase.co";   // e.g. "https://abcdxyz.supabase.co"
 const SB_KEY="sb_publishable_6KNNQUXlvvl1XXTK9nTC_w_VgZxnodr";   // the "anon public" key
 /* ====================================================================== */
+const VER="v5";
 const LOCS=["Freezer","Fridge","Pantry"];
 const CATS=["Meat & fish","Dairy & eggs","Fruit & veg","Bread & bakery","Pasta, rice & grains","Tins & jars","Condiments","Snacks & sweets","Drinks","Other"];
 const KW=[["Condiments","sauce|ketchup|mayo|mayonnaise|mustard|dressing|oil|vinegar|soy|stock|spice|salt|pepper|seasoning|paste|curry|syrup|relish|marinade|gravy"],
@@ -115,7 +117,7 @@ function change(id,d,q){const it=S.items.find(i=>i.id==id);if(!it)return;it.qty+
   if(it.qty<=0){S.items=S.items.filter(i=>i.id!=id);del(id);if(!q)toast(it.name+" used up ✓")}else put(it);if(!q)render()}
 function render(){
   const st=!SB_URL?"this device only (sync not set up)":!HH?"tap ⚙️ to turn on sync":sync=="live"?"☁️ synced":sync=="error"?"offline — will retry":"connecting…";
-  $("#sub").textContent=(S.items.length?S.items.reduce((a,i)=>a+i.qty,0)+" items · "+S.items.filter(old).length+" sitting 2+ months":"Know what you have. Cook what you've got.")+" · "+st;
+  $("#sub").textContent=(S.items.length?S.items.reduce((a,i)=>a+i.qty,0)+" items · "+S.items.filter(old).length+" sitting 2+ months":"Know what you have. Cook what you've got.")+" · "+st+" · "+VER;
   $("#nav").innerHTML=[["stock","🧊","Stock"],["add","➕","Add"],["recipes","🍳","Cook"]].map(([k,e,l])=>`<button class="${tab==k?"on":""}" onclick="go('${k}')"><b>${e}</b>${l}</button>`).join("");
   $("#app").innerHTML=tab=="stock"?vStock():tab=="add"?vAdd():vRec();
 }
@@ -167,6 +169,14 @@ async function found(code){
 }
 /* Scanner */
 let stream=null,live=false;
+const ZOPT={formats:["EAN-13","EAN-8","UPC-A","UPC-E","Code128"],tryHarder:true,maxNumberOfSymbols:1};
+async function scanPhoto(inp){
+  const f=inp.files[0];inp.value="";if(!f)return;
+  stopScan();toast("Reading photo…");
+  try{await loadZW();const r=await ZXingWASM.readBarcodes(f,ZOPT);
+    if(r.length&&r[0].text)found(r[0].text);else toast("No barcode found — retake it closer, flat, no glare")}
+  catch(e){toast("Couldn't read the photo: "+((e&&e.message)||"error").slice(0,60))}
+}
 const msg=t=>{$("#smsg").textContent=t};
 function loadZW(){return new Promise((res,rej)=>{if(window.ZXingWASM)return res();const s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/zxing-wasm@2.2.1/dist/iife/reader/index.js";s.onload=res;s.onerror=()=>rej(new Error("Couldn't load the scanner — check your connection"));document.head.appendChild(s)})}
 setTimeout(()=>{if(!("BarcodeDetector" in window))loadZW().catch(()=>{})},1500);
@@ -185,14 +195,15 @@ async function startScan(){
     }else{
       await ready;
       const cv=document.createElement("canvas"),cx=cv.getContext("2d",{willReadFrequently:true});
-      const opt={formats:["EAN-13","EAN-8","UPC-A","UPC-E","Code128"],tryHarder:true,maxNumberOfSymbols:1};
+      let n=0;
       (async function loop(){
         if(!live)return;
         if(v.videoWidth){
           const sh=v.videoHeight*.6,sy=(v.videoHeight-sh)/2,k=Math.min(1,1000/v.videoWidth);
           cv.width=v.videoWidth*k;cv.height=sh*k;cx.drawImage(v,0,sy,v.videoWidth,sh,0,0,cv.width,cv.height);
-          try{const r=await ZXingWASM.readBarcodes(cx.getImageData(0,0,cv.width,cv.height),opt);
-            if(live&&r.length&&r[0].text){found(r[0].text);return}}catch(e){}
+          try{const r=await ZXingWASM.readBarcodes(cx.getImageData(0,0,cv.width,cv.height),ZOPT);
+            if(live&&r.length&&r[0].text){found(r[0].text);return}
+            if(live&&++n%10==0)msg("Scanning… ("+n+" tries). Hold steady in the box.")}catch(e){msg("Scanner error: "+((e&&e.message)||e).toString().slice(0,90))}
         }
         setTimeout(loop,40);
       })();
