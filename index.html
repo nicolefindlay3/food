@@ -61,7 +61,7 @@ label{font-size:13px;color:var(--mute);font-weight:600}
 const SB_URL="https://nvvqyjsmbgsebcjdinrp.supabase.co";   // e.g. "https://abcdxyz.supabase.co"
 const SB_KEY="sb_publishable_6KNNQUXlvvl1XXTK9nTC_w_VgZxnodr";   // the "anon public" key
 /* ====================================================================== */
-const VER="v8";
+const VER="v9";
 const LOCS=["Freezer","Fridge","Pantry"];
 const CATS=["Meat & fish","Dairy & eggs","Fruit & veg","Bread & bakery","Pasta, rice & grains","Tins & jars","Condiments","Snacks & sweets","Drinks","Other"];
 const KW=[["Condiments","sauce|ketchup|mayo|mayonnaise|mustard|dressing|oil|vinegar|soy|stock|spice|salt|pepper|seasoning|paste|curry|syrup|relish|marinade|gravy"],
@@ -141,7 +141,7 @@ function vAdd(){
   <div class="card">
   ${form.hint?`<div class="hint">${form.hint}</div>`:""}
   <label>${form.code?"Barcode "+esc(form.code):"Item name"}</label>
-  <input id="fn" value="${esc(form.name)}" placeholder="e.g. Chicken thighs" oninput="form.name=this.value" autocomplete="off">
+  <input id="fn" value="${esc(form.name)}" placeholder="e.g. Chicken thighs" oninput="form.name=this.value" onchange="form.name=this.value" onblur="form.name=this.value" autocomplete="off">
   <label>How many</label>
   <div class="stepper"><button onclick="form.n=Math.max(1,form.n-1);render()">−</button><span>${form.n}</span><button onclick="form.n++;render()">+</button></div>
   <label>Where is it</label>
@@ -151,6 +151,7 @@ function vAdd(){
   <button class="btn" onclick="submitAdd()">Add to stock</button></div>`;
 }
 function submitAdd(){
+  const fe=$("#fn");if(fe)form.name=fe.value;
   if(!form.name.trim()){toast("Give it a name first");return}
   addItem(form.name,form.loc,form.n,form.code,form.cat);toast("Added "+form.name);
   form={name:"",loc:form.loc,n:1,code:"",hint:""};render();
