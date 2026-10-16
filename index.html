@@ -61,7 +61,7 @@ label{font-size:13px;color:var(--mute);font-weight:600}
 const SB_URL="https://nvvqyjsmbgsebcjdinrp.supabase.co";   // e.g. "https://abcdxyz.supabase.co"
 const SB_KEY="sb_publishable_6KNNQUXlvvl1XXTK9nTC_w_VgZxnodr";   // the "anon public" key
 /* ====================================================================== */
-const VER="v6";
+const VER="v7";
 const LOCS=["Freezer","Fridge","Pantry"];
 const CATS=["Meat & fish","Dairy & eggs","Fruit & veg","Bread & bakery","Pasta, rice & grains","Tins & jars","Condiments","Snacks & sweets","Drinks","Other"];
 const KW=[["Condiments","sauce|ketchup|mayo|mayonnaise|mustard|dressing|oil|vinegar|soy|stock|spice|salt|pepper|seasoning|paste|curry|syrup|relish|marinade|gravy"],
@@ -161,7 +161,7 @@ async function off(code){
 async function found(code){
   if(!code)return;stopScan();if(navigator.vibrate)navigator.vibrate(60);
   const loc=(form&&form.loc)||"Pantry";
-  if(S.codes[code]){addItem(S.codes[code],loc,1,code);toast("+1 "+S.codes[code]);tab="stock";render();return}
+  if(S.codes[code]){form={name:S.codes[code],loc,n:1,code,cat:"",hint:"✓ Scanned — set how many, then add"};tab="add";render();return}
   toast("Looking it up…");
   const name=await off(code);
   form={name,loc,n:1,code,hint:name?"✓ Found it — edit the name if you like":"Not in the database — name it once and it's saved"};
