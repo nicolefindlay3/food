@@ -166,23 +166,44 @@ async function found(code){
   tab="add";render();
 }
 /* Scanner */
-let stream=null,reader=null,live=false;
-function loadZX(){return new Promise((res,rej)=>{if(window.ZXing)return res();const s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js";s.onload=res;s.onerror=rej;document.head.appendChild(s)})}
+let stream=null,live=false,mfr=null;
+const msg=t=>{$("#smsg").textContent=t};
+function loadZX(){return new Promise((res,rej)=>{if(window.ZXing)return res();const s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js";s.onload=res;s.onerror=()=>rej(new Error("Couldn't load the scanner library — check your connection"));document.head.appendChild(s)})}
 async function startScan(){
-  $("#scan").style.display="flex";live=true;$("#smsg").textContent="Starting camera…";
+  $("#scan").style.display="flex";live=true;msg("Starting camera…");
   try{
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error("This browser can't open the camera here. Use Safari or Chrome and the https address.");
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}},audio:false});
+    const v=$("#vid");v.setAttribute("playsinline","");v.muted=true;v.srcObject=stream;await v.play();
+    try{const t=stream.getVideoTracks()[0],c=t.getCapabilities&&t.getCapabilities();if(c&&c.focusMode&&c.focusMode.includes("continuous"))await t.applyConstraints({advanced:[{focusMode:"continuous"}]})}catch(e){}
+    msg("Hold the barcode inside the box, steady, about 15–20cm away");
     if("BarcodeDetector" in window){
-      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
-      const v=$("#vid");v.srcObject=stream;await v.play();$("#smsg").textContent="Point at a barcode";
       const det=new BarcodeDetector({formats:["ean_13","ean_8","upc_a","upc_e","code_128"]});
-      (async function loop(){if(!live)return;try{const r=await det.detect(v);if(r.length){found(r[0].rawValue);return}}catch(e){}setTimeout(loop,250)})();
+      (async function loop(){if(!live)return;try{const r=await det.detect(v);if(r.length){found(r[0].rawValue);return}}catch(e){}setTimeout(loop,200)})();
     }else{
-      await loadZX();reader=new ZXing.BrowserMultiFormatReader();$("#smsg").textContent="Point at a barcode";
-      reader.decodeFromVideoDevice(undefined,"vid",r=>{if(r&&live)found(r.getText())});
+      await loadZX();
+      const h=new Map(),F=ZXing.BarcodeFormat;
+      h.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[F.EAN_13,F.EAN_8,F.UPC_A,F.UPC_E,F.CODE_128]);h.set(ZXing.DecodeHintType.TRY_HARDER,true);
+      mfr=new ZXing.MultiFormatReader();mfr.setHints(h);
+      const cv=document.createElement("canvas"),cx=cv.getContext("2d",{willReadFrequently:true});
+      (function loop(){
+        if(!live)return;
+        if(v.videoWidth){
+          const sw=v.videoWidth*.84,sh=v.videoHeight*.4,sx=(v.videoWidth-sw)/2,sy=(v.videoHeight-sh)/2;
+          cv.width=sw;cv.height=sh;cx.drawImage(v,sx,sy,sw,sh,0,0,sw,sh);
+          try{const bmp=new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(new ZXing.HTMLCanvasElementLuminanceSource(cv)));
+            const r=mfr.decode(bmp);if(r){found(r.getText());return}}catch(e){}
+        }
+        setTimeout(loop,150);
+      })();
     }
-  }catch(e){stopScan();toast("Camera unavailable — type the barcode instead")}
+  }catch(e){
+    const n=e&&e.name;
+    msg(n=="NotAllowedError"?"Camera is blocked. On iPhone: Settings → Safari → Camera → Allow, then try again.":n=="NotFoundError"?"No camera found on this device.":(e&&e.message)||"Camera couldn't start.");
+    live=false;if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
+  }
 }
-function stopScan(){live=false;$("#scan").style.display="none";if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}if(reader){try{reader.reset()}catch(e){}reader=null}}
+function stopScan(){live=false;$("#scan").style.display="none";if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}}
 /* Recipes */
 const R=[
 ["Fried rice","20 min",[["rice"],["egg"],["pea","corn","carrot","veg","bean"]],"Fry cooked rice hot with veg, push aside, scramble eggs in, splash of soy, stir together."],
