@@ -61,7 +61,7 @@ label{font-size:13px;color:var(--mute);font-weight:600}
 const SB_URL="https://nvvqyjsmbgsebcjdinrp.supabase.co";   // e.g. "https://abcdxyz.supabase.co"
 const SB_KEY="sb_publishable_6KNNQUXlvvl1XXTK9nTC_w_VgZxnodr";   // the "anon public" key
 /* ====================================================================== */
-const VER="v7";
+const VER="v8";
 const LOCS=["Freezer","Fridge","Pantry"];
 const CATS=["Meat & fish","Dairy & eggs","Fruit & veg","Bread & bakery","Pasta, rice & grains","Tins & jars","Condiments","Snacks & sweets","Drinks","Other"];
 const KW=[["Condiments","sauce|ketchup|mayo|mayonnaise|mustard|dressing|oil|vinegar|soy|stock|spice|salt|pepper|seasoning|paste|curry|syrup|relish|marinade|gravy"],
@@ -76,7 +76,7 @@ const KW=[["Condiments","sauce|ketchup|mayo|mayonnaise|mustard|dressing|oil|vine
 .map(([c,k])=>[c,new RegExp("\\b("+k+")s?\\b")]);
 function guess(n){n=n.toLowerCase();for(const[c,r]of KW)if(r.test(n))return c;return"Other"}
 const catOf=i=>i.cat||guess(i.name);
-let cfilter="All";
+let cfilter="All",last=null;
 let S={items:[],codes:{}},HH=localStorage.getItem("uiu_hh")||"findlay",sync="local",pend=0,tab="stock",filter="All",form=null;
 try{S=Object.assign(S,JSON.parse(localStorage.getItem("uiu")||"{}"))}catch(e){}
 const $=s=>document.querySelector(s),ON=()=>SB_URL&&SB_KEY&&HH,enc=encodeURIComponent;
@@ -111,10 +111,10 @@ function addItem(name,loc,n,code,cat){
   let it=S.items.find(i=>i.name.toLowerCase()===name.toLowerCase()&&i.loc===loc);
   if(it){it.qty+=n;if(!it.cat)it.cat=cat||guess(name)}else{it={cat:cat||guess(name),id:"i"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),name,loc,qty:n,added:Date.now()};S.items.push(it)}
   put(it);if(code){S.codes[code]=name;putCode(code,name)}
-}
+  return it}
 function setCat(id,c){const it=S.items.find(i=>i.id==id);if(!it)return;it.cat=c;put(it);render()}
 function change(id,d,q){const it=S.items.find(i=>i.id==id);if(!it)return;it.qty+=d;
-  if(it.qty<=0){S.items=S.items.filter(i=>i.id!=id);del(id);if(!q)toast(it.name+" used up ✓")}else put(it);if(!q)render()}
+  if(it.qty<=0){S.items=S.items.filter(i=>i.id!=id);if(last==id)last=null;del(id);if(!q)toast(it.name+" used up ✓")}else put(it);if(!q)render()}
 function render(){
   const st=!SB_URL?"this device only (sync not set up)":!HH?"tap ⚙️ to turn on sync":sync=="live"?"☁️ synced":sync=="error"?"offline — will retry":"connecting…";
   $("#sub").textContent=(S.items.length?S.items.reduce((a,i)=>a+i.qty,0)+" items · "+S.items.filter(old).length+" sitting 2+ months":"Know what you have. Cook what you've got.")+" · "+st+" · "+VER;
@@ -132,8 +132,11 @@ function vStock(){
   <div class="card">${list.length?list.map(i=>`<div class="row"><div class="n"><div>${esc(i.name)}${old(i)?'<span class="tag">use soon</span>':""}</div><small>${i.loc} · added ${age(i.added)}</small><br><select class="cs" onchange="setCat('${i.id}',this.value)">${CATS.map(c=>`<option ${c==catOf(i)?"selected":""}>${c}</option>`).join("")}</select></div><div class="q"><button onclick="change('${i.id}',-1)">−</button><span>${i.qty}</span><button onclick="change('${i.id}',1)">+</button></div></div>`).join(""):`<div class="empty">Nothing here.</div>`}</div>
   <div class="sub" style="text-align:center">Oldest first. Tap − when you use one; at 0 it's removed.</div>`;
 }
+function lastCard(){
+  const it=S.items.find(i=>i.id==last);if(!it)return"";
+  return`<div class="card" style="border-color:var(--sage)"><div class="hint">✓ Added</div><div class="row" style="border:0;padding:4px 0"><div class="n"><div>${esc(it.name)}</div><small>${it.loc} · ${catOf(it)}</small></div><div class="q"><button onclick="change('${it.id}',-1)">−</button><span>${it.qty}</span><button onclick="change('${it.id}',1)">+</button></div></div><button class="btn" style="margin-top:8px" onclick="startScan()">📷 Scan next</button></div>`}
 function vAdd(){
-  return`<button class="btn" onclick="startScan()">📷 Scan barcode</button>
+  return lastCard()+`<button class="btn" onclick="startScan()">📷 Scan barcode</button>
   <div class="card two" style="margin-top:10px;padding:10px"><input id="bc" inputmode="numeric" placeholder="…or type a barcode number"><button class="btn alt" onclick="found($('#bc').value.trim())">Look up</button></div>
   <div class="card">
   ${form.hint?`<div class="hint">${form.hint}</div>`:""}
@@ -161,10 +164,10 @@ async function off(code){
 async function found(code){
   if(!code)return;stopScan();if(navigator.vibrate)navigator.vibrate(60);
   const loc=(form&&form.loc)||"Pantry";
-  if(S.codes[code]){form={name:S.codes[code],loc,n:1,code,cat:"",hint:"✓ Scanned — set how many, then add"};tab="add";render();return}
-  toast("Looking it up…");
-  const name=await off(code);
-  form={name,loc,n:1,code,hint:name?"✓ Found it — edit the name if you like":"Not in the database — name it once and it's saved"};
+  let name=S.codes[code];
+  if(!name){toast("Looking it up…");name=await off(code)}
+  if(name){const it=addItem(name,loc,1,code);last=it.id;form={name:"",loc,n:1,code:"",cat:"",hint:""};tab="add";render();scrollTo(0,0);return}
+  form={name:"",loc,n:1,code,cat:"",hint:"Not in the database — name it once and it's saved"};
   tab="add";render();
 }
 /* Scanner */
