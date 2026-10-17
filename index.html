@@ -38,6 +38,13 @@ label{font-size:13px;color:var(--mute);font-weight:600}
 .stepper span{font-size:22px;font-weight:700;min-width:30px;text-align:center}
 .cs{font:inherit;font-size:12px;border:0;background:var(--chip);color:var(--ink);border-radius:8px;padding:3px 4px;margin-top:5px;max-width:100%}
 .wrap{flex-wrap:wrap;overflow:visible}
+.cg{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin:16px 4px 6px;display:flex;justify-content:space-between}
+.cg span{color:var(--mute);font-weight:600}
+.li{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}.li:last-child{border:0}
+.li b{font-weight:600;overflow-wrap:anywhere}.li small{color:var(--mute);white-space:nowrap}
+.ce{display:flex;gap:6px;align-items:center;margin-bottom:8px}.ce input{margin:0;flex:1}
+.ce button{width:38px;height:42px;border-radius:12px;border:0;background:var(--chip);color:var(--ink);font-size:16px;flex:none}
+.ce button.x{color:#c0392b}.ce button:disabled{opacity:.3}
 .empty{text-align:center;color:var(--mute);padding:30px 10px}
 .rec h3{margin:0 0 4px;font-family:Georgia,serif}.rec .m{font-size:13px;color:var(--mute)}.ok{color:var(--sage);font-weight:700}
 .rec p{font-size:14px;margin:8px 0 10px;line-height:1.45}
@@ -49,7 +56,7 @@ label{font-size:13px;color:var(--mute);font-weight:600}
 #scan .frame{position:absolute;left:12%;right:12%;top:30%;height:22%;border:3px solid #fff8;border-radius:14px}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:92px;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:99px;font-size:14px;display:none;z-index:30;max-width:90%}
 </style></head><body>
-<div class="top"><h1>Use It Up</h1><button class="gear" onclick="setHH()" aria-label="Settings">⚙️</button></div>
+<div class="top"><h1>Use It Up</h1><button class="gear" onclick="go(tab=='settings'?'stock':'settings')" aria-label="Settings">⚙️</button></div>
 <div class="sub" id="sub"></div>
 <div id="app"></div>
 <nav class="nav" id="nav"></nav>
@@ -61,10 +68,11 @@ label{font-size:13px;color:var(--mute);font-weight:600}
 const SB_URL="https://nvvqyjsmbgsebcjdinrp.supabase.co";   // e.g. "https://abcdxyz.supabase.co"
 const SB_KEY="sb_publishable_6KNNQUXlvvl1XXTK9nTC_w_VgZxnodr";   // the "anon public" key
 /* ====================================================================== */
-const VER="v10";
+const VER="v11";
 const LOCS=["Freezer","Fridge","Pantry"];
-const CATS=["Meat & fish","Dairy & eggs","Fruit & veg","Bread & bakery","Pasta, rice & grains","Tins & jars","Condiments","Snacks & sweets","Drinks","Other"];
-const KW=[["Condiments","sauce|ketchup|mayo|mayonnaise|mustard|dressing|oil|vinegar|soy|stock|spice|salt|pepper|seasoning|paste|curry|syrup|relish|marinade|gravy"],
+const DEFCATS=["Freezer easy food","Meat & fish","Dairy & eggs","Fruit & veg","Bread & bakery","Pasta, rice & grains","Tins & jars","Condiments","Snacks & sweets","Drinks","Other"];
+const KW=[["Freezer easy food","nugget|pie|pizza|lasagne|lasagna|dim sim|fish finger|spring roll|frozen meal|parmi|parmigiana|dumpling|hash brown|croquette|sausage roll|pastie|schnitzel|meal"],
+["Condiments","sauce|ketchup|mayo|mayonnaise|mustard|dressing|oil|vinegar|soy|stock|spice|salt|pepper|seasoning|paste|curry|syrup|relish|marinade|gravy"],
 ["Tins & jars","tin|tinned|canned|baked bean|beans|tuna|chickpea|passata|soup|coconut|jar|pickle|jam|spread|peanut butter|vegemite|honey"],
 ["Snacks & sweets","chip|biscuit|cracker|chocolate|lolly|snack|popcorn|ice cream|muesli bar|bar"],
 ["Drinks","juice|water|cordial|soda|coffee|tea|cola|drink"],
@@ -74,10 +82,11 @@ const KW=[["Condiments","sauce|ketchup|mayo|mayonnaise|mustard|dressing|oil|vine
 ["Dairy & eggs","milk|cheese|yoghurt|yogurt|butter|cream|egg|custard|margarine"],
 ["Fruit & veg","apple|banana|orange|berry|berries|grape|lemon|lime|mango|fruit|veg|pea|corn|carrot|potato|pumpkin|onion|garlic|broccoli|cauliflower|spinach|lettuce|salad|capsicum|zucchini|tomato|cucumber|mushroom|avocado"]]
 .map(([c,k])=>[c,new RegExp("\\b("+k+")s?\\b")]);
+function resolve(c){let k=0;while(S.ren[c]&&k++<10)c=S.ren[c];return c}
 function guess(n){n=n.toLowerCase();for(const[c,r]of KW)if(r.test(n))return c;return"Other"}
-const catOf=i=>i.cat||guess(i.name);
+function catOf(i){const c=resolve(i.cat||guess(i.name));return S.cats.includes(c)?c:"Other"}
 let cfilter="All",last=null;
-let S={items:[],codes:{}},HH=localStorage.getItem("uiu_hh")||"findlay",sync="local",pend=0,tab="stock",filter="All",draft=null;
+let S={items:[],codes:{},cats:[...DEFCATS],ren:{}},HH=localStorage.getItem("uiu_hh")||"findlay",sync="local",pend=0,tab="stock",filter="All",draft=null;
 try{S=Object.assign(S,JSON.parse(localStorage.getItem("uiu")||"{}"))}catch(e){}
 const $=s=>document.querySelector(s),ON=()=>SB_URL&&SB_KEY&&HH,enc=encodeURIComponent;
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -96,7 +105,7 @@ async function pull(){
     const mk="uiu_mig_"+HH;
     if(!a.length&&S.items.length&&!localStorage.getItem(mk)){localStorage.setItem(mk,1);S.items.forEach(put);Object.entries(S.codes).forEach(([c,n])=>putCode(c,n));sync="live";render();return}
     localStorage.setItem(mk,1);
-    S.items=a.map(({household,...r})=>r);S.codes={};b.forEach(c=>S.codes[c.code]=c.name);sync="live";save();if(tab!="add")render()}
+    S.items=a.map(({household,...r})=>r);S.codes={};b.forEach(c=>{if(c.code=="__cats__"){try{const j=JSON.parse(c.name);if(Array.isArray(j.cats)&&j.cats.length){S.cats=j.cats;S.ren=j.ren||{}}}catch(e){}}else S.codes[c.code]=c.name});if(!S.cats.includes("Other"))S.cats.push("Other");sync="live";save();if(tab!="add"&&tab!="settings")render()}
   catch(e){sync="error";render()}
 }
 function setHH(){
@@ -112,16 +121,51 @@ function addItem(name,loc,n,code,cat){
   if(it){it.qty+=n;if(!it.cat)it.cat=cat||guess(name)}else{it={cat:cat||guess(name),id:"i"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),name,loc,qty:n,added:Date.now()};S.items.push(it)}
   put(it);if(code){S.codes[code]=name;putCode(code,name)}
   return it}
+function saveCats(){putCode("__cats__",JSON.stringify({cats:S.cats,ren:S.ren}))}
+const cleanName=v=>String(v||"").replace(/["'<>\\]/g,"").replace(/\s+/g," ").trim().slice(0,40);
+function addCat(){
+  const el=$("#nc"),n=cleanName(el&&el.value);if(!n){toast("Type a category name");return}
+  if(S.cats.some(c=>c.toLowerCase()==n.toLowerCase())){toast("That category already exists");return}
+  delete S.ren[n];const k=S.cats.indexOf("Other");S.cats.splice(k<0?S.cats.length:k,0,n);saveCats();toast("Added “"+n+"”");render()}
+function renameCat(i,v){
+  const old=S.cats[i],n=cleanName(v);if(!n||n==old||old=="Other"){render();return}
+  if(S.cats.some((c,k)=>k!=i&&c.toLowerCase()==n.toLowerCase())){toast("That name is already used");render();return}
+  S.cats[i]=n;S.ren[old]=n;delete S.ren[n];
+  S.items.forEach(it=>{if(it.cat==old){it.cat=n;put(it)}});saveCats();toast("Renamed");render()}
+function moveCat(i,d){const j=i+d;if(j<0||j>=S.cats.length)return;[S.cats[i],S.cats[j]]=[S.cats[j],S.cats[i]];saveCats();render()}
+function delCat(i){
+  const c=S.cats[i];if(c=="Other")return;
+  const n=S.items.filter(it=>catOf(it)==c).length;
+  if(!confirm(n?`Delete “${c}”? ${n} item${n>1?"s":""} will move to Other.`:`Delete “${c}”?`))return;
+  S.items.forEach(it=>{if(catOf(it)==c){it.cat="Other";put(it)}});
+  S.cats.splice(i,1);saveCats();render()}
 function setCat(id,c){const it=S.items.find(i=>i.id==id);if(!it)return;it.cat=c;put(it);render()}
 function change(id,d,q){const it=S.items.find(i=>i.id==id);if(!it)return;it.qty+=d;
   if(it.qty<=0){S.items=S.items.filter(i=>i.id!=id);if(last==id)last=null;del(id);if(!q)toast(it.name+" used up ✓")}else put(it);if(!q)render()}
 function render(){
   const st=!SB_URL?"this device only (sync not set up)":!HH?"tap ⚙️ to turn on sync":sync=="live"?"☁️ synced":sync=="error"?"offline — will retry":"connecting…";
   $("#sub").textContent=(S.items.length?S.items.reduce((a,i)=>a+i.qty,0)+" items · "+S.items.filter(old).length+" sitting 2+ months":"Know what you have. Cook what you've got.")+" · "+st+" · "+VER;
-  $("#nav").innerHTML=[["stock","🧊","Stock"],["add","➕","Add"],["recipes","🍳","Cook"]].map(([k,e,l])=>`<button class="${tab==k?"on":""}" onclick="go('${k}')"><b>${e}</b>${l}</button>`).join("");
-  $("#app").innerHTML=tab=="stock"?vStock():tab=="add"?vAdd():vRec();
+  $("#nav").innerHTML=[["stock","🧊","Stock"],["list","📋","List"],["add","➕","Add"],["recipes","🍳","Cook"]].map(([k,e,l])=>`<button class="${tab==k?"on":""}" onclick="go('${k}')"><b>${e}</b>${l}</button>`).join("");
+  $("#app").innerHTML=tab=="stock"?vStock():tab=="list"?vList():tab=="settings"?vSet():tab=="add"?vAdd():vRec();
 }
 function go(t){tab=t;if(t=="add"&&!draft)draft={name:"",loc:"Pantry",n:1,code:"",hint:""};render();scrollTo(0,0)}
+function vList(){
+  if(!S.items.length)return`<div class="empty">Nothing here yet.</div>`;
+  const by={};S.items.forEach(i=>{(by[catOf(i)]=by[catOf(i)]||[]).push(i)});
+  return S.cats.filter(c=>by[c]).map(c=>{const a=by[c].sort((x,y)=>x.name.localeCompare(y.name));
+    return`<div class="cg">${esc(c)}<span>${a.reduce((t,i)=>t+i.qty,0)}</span></div><div class="card" style="padding:4px 14px">${a.map(i=>`<div class="li"><b>${esc(i.name)}</b><small>${i.loc} · ×${i.qty}</small></div>`).join("")}</div>`}).join("");
+}
+function vSet(){
+  const n=S.cats.length;
+  return`<div class="card"><label>Household code</label>
+  <div style="font-size:18px;font-weight:700;margin:4px 0 10px">${esc(HH||"not set")}</div>
+  <button class="btn alt" onclick="setHH()">Change household code</button>
+  <div class="sub" style="margin:8px 0 0">Use the same code on every phone to share one pantry.</div></div>
+  <div class="card"><label>Categories</label><div class="sub" style="margin:2px 0 10px">Rename, reorder or delete. Changes sync to every phone.</div>
+  ${S.cats.map((c,i)=>`<div class="ce"><button ${i==0?"disabled":""} onclick="moveCat(${i},-1)">↑</button><button ${i==n-1?"disabled":""} onclick="moveCat(${i},1)">↓</button><input value="${esc(c)}" ${c=="Other"?"disabled":""} onchange="renameCat(${i},this.value)"><button class="x" ${c=="Other"?"disabled":""} onclick="delCat(${i})">✕</button></div>`).join("")}
+  <label style="display:block;margin-top:14px">New category</label>
+  <div class="two" style="margin-top:4px"><input id="nc" placeholder="e.g. Baking" autocomplete="off"><button class="btn" onclick="addCat()">Add</button></div></div>`;
+}
 function vStock(){
   if(!S.items.length)return`<div class="empty">Nothing here yet.<br>Tap Add to scan or enter your first item.</div>`;
   const cats=[...new Set(S.items.map(catOf))].sort();
@@ -129,7 +173,7 @@ function vStock(){
   const list=S.items.filter(i=>(filter=="All"||i.loc==filter)&&(cfilter=="All"||catOf(i)==cfilter)).sort((a,b)=>a.added-b.added);
   const row=(arr,cur,v)=>`<div class="chips">${arr.map(l=>`<button class="chip ${cur==l?"on":""}" onclick="${v}='${l.replace(/'/g,"\\'")}';render()">${l}</button>`).join("")}</div>`;
   return row(["All",...LOCS],filter,"filter")+row(["All",...cats],cfilter,"cfilter")+`
-  <div class="card">${list.length?list.map(i=>`<div class="row"><div class="n"><div>${esc(i.name)}${old(i)?'<span class="tag">use soon</span>':""}</div><small>${i.loc} · added ${age(i.added)}</small><br><select class="cs" onchange="setCat('${i.id}',this.value)">${CATS.map(c=>`<option ${c==catOf(i)?"selected":""}>${c}</option>`).join("")}</select></div><div class="q"><button onclick="change('${i.id}',-1)">−</button><span>${i.qty}</span><button onclick="change('${i.id}',1)">+</button></div></div>`).join(""):`<div class="empty">Nothing here.</div>`}</div>
+  <div class="card">${list.length?list.map(i=>`<div class="row"><div class="n"><div>${esc(i.name)}${old(i)?'<span class="tag">use soon</span>':""}</div><small>${i.loc} · added ${age(i.added)}</small><br><select class="cs" onchange="setCat('${i.id}',this.value)">${S.cats.map(c=>`<option ${c==catOf(i)?"selected":""}>${esc(c)}</option>`).join("")}</select></div><div class="q"><button onclick="change('${i.id}',-1)">−</button><span>${i.qty}</span><button onclick="change('${i.id}',1)">+</button></div></div>`).join(""):`<div class="empty">Nothing here.</div>`}</div>
   <div class="sub" style="text-align:center">Oldest first. Tap − when you use one; at 0 it's removed.</div>`;
 }
 function lastCard(){
@@ -147,7 +191,7 @@ function vAdd(){
   <label>Where is it</label>
   <div class="chips" style="margin-top:6px">${LOCS.map(l=>`<button class="chip ${draft.loc==l?"on":""}" onclick="draft.loc='${l}';render()">${l}</button>`).join("")}</div>
   <label>Category</label>
-  <div class="chips wrap" style="margin-top:6px"><button class="chip ${!draft.cat?"on":""}" onclick="draft.cat='';render()">Auto</button>${CATS.map((c,k)=>`<button class="chip ${draft.cat==c?"on":""}" onclick="draft.cat=CATS[${k}];render()">${c}</button>`).join("")}</div>
+  <div class="chips wrap" style="margin-top:6px"><button class="chip ${!draft.cat?"on":""}" onclick="draft.cat='';render()">Auto</button>${S.cats.map((c,k)=>`<button class="chip ${draft.cat==c?"on":""}" onclick="draft.cat=S.cats[${k}];render()">${esc(c)}</button>`).join("")}</div>
   <button class="btn" onclick="submitAdd()">Add to stock</button></div>`;
 }
 function submitAdd(){
