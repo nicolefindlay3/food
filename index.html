@@ -38,6 +38,10 @@ label{font-size:13px;color:var(--mute);font-weight:600}
 .stepper span{font-size:22px;font-weight:700;min-width:30px;text-align:center}
 .cs{font:inherit;font-size:12px;border:0;background:var(--chip);color:var(--ink);border-radius:8px;padding:3px 4px;margin-top:5px;max-width:100%}
 .wrap{flex-wrap:wrap;overflow:visible}
+.th{position:relative;width:46px;height:46px;border-radius:12px;background:var(--chip);flex:none;display:flex;align-items:center;justify-content:center;font-size:22px;overflow:hidden;cursor:pointer}
+.th img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#fff}
+.th.s{width:38px;height:38px;font-size:18px;border-radius:10px}.th.l{width:64px;height:64px;font-size:30px;border-radius:14px}
+.pr{display:flex;align-items:center;gap:12px;margin-bottom:12px}.pr .btn{width:auto;padding:10px 14px;font-size:14px}
 .cg{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin:16px 4px 6px;display:flex;justify-content:space-between}
 .cg span{color:var(--mute);font-weight:600}
 .li{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}.li:last-child{border:0}
@@ -62,13 +66,14 @@ label{font-size:13px;color:var(--mute);font-weight:600}
 <nav class="nav" id="nav"></nav>
 <div id="scan"><video id="vid" playsinline muted></video><div class="frame"></div><div class="bar"><div id="smsg">Point at a barcode</div><button class="btn" style="margin-top:10px" onclick="$('#bp').click()">📸 Take a photo of the barcode instead</button><button class="btn alt" style="margin-top:8px" onclick="stopScan()">Cancel</button></div></div>
 <div id="toast"></div>
+<input id="ip" type="file" accept="image/*" hidden onchange="pickImg(this)">
 <input id="bp" type="file" accept="image/*" capture="environment" hidden onchange="scanPhoto(this)">
 <script>
 /* ====== PASTE YOUR SUPABASE DETAILS HERE (Project Settings > API) ====== */
 const SB_URL="https://nvvqyjsmbgsebcjdinrp.supabase.co";   // e.g. "https://abcdxyz.supabase.co"
 const SB_KEY="sb_publishable_6KNNQUXlvvl1XXTK9nTC_w_VgZxnodr";   // the "anon public" key
 /* ====================================================================== */
-const VER="v11";
+const VER="v12";
 const LOCS=["Freezer","Fridge","Pantry"];
 const DEFCATS=["Freezer easy food","Meat & fish","Dairy & eggs","Fruit & veg","Bread & bakery","Pasta, rice & grains","Tins & jars","Condiments","Snacks & sweets","Drinks","Other"];
 const KW=[["Freezer easy food","nugget|pie|pizza|lasagne|lasagna|dim sim|fish finger|spring roll|frozen meal|parmi|parmigiana|dumpling|hash brown|croquette|sausage roll|pastie|schnitzel|meal"],
@@ -96,7 +101,9 @@ async function sb(path,o={}){const r=await fetch(SB_URL+"/rest/v1/"+path,{...o,h
   if(!r.ok)throw new Error(r.status);const t=await r.text();return t?JSON.parse(t):null}
 function w(p){pend++;return p.catch(()=>{sync="error";render()}).finally(()=>pend--)}
 const UP={method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=minimal"}};
-function put(it){save();ON()&&w(sb("pantry_items?on_conflict=id",{...UP,body:JSON.stringify({...it,household:HH})}))}
+function put(it){save();if(!ON())return;
+  const send=o=>sb("pantry_items?on_conflict=id",{...UP,body:JSON.stringify({...o,household:HH})});
+  w(send(it).catch(e=>{if(it.img){const{img,...r}=it;return send(r)}throw e}))}
 function del(id){save();ON()&&w(sb("pantry_items?id=eq."+enc(id)+"&household=eq."+enc(HH),{method:"DELETE"}))}
 function putCode(c,n){save();ON()&&w(sb("pantry_codes?on_conflict=household,code",{...UP,body:JSON.stringify({household:HH,code:c,name:n})}))}
 async function pull(){
@@ -105,7 +112,7 @@ async function pull(){
     const mk="uiu_mig_"+HH;
     if(!a.length&&S.items.length&&!localStorage.getItem(mk)){localStorage.setItem(mk,1);S.items.forEach(put);Object.entries(S.codes).forEach(([c,n])=>putCode(c,n));sync="live";render();return}
     localStorage.setItem(mk,1);
-    S.items=a.map(({household,...r})=>r);S.codes={};b.forEach(c=>{if(c.code=="__cats__"){try{const j=JSON.parse(c.name);if(Array.isArray(j.cats)&&j.cats.length){S.cats=j.cats;S.ren=j.ren||{}}}catch(e){}}else S.codes[c.code]=c.name});if(!S.cats.includes("Other"))S.cats.push("Other");sync="live";save();if(tab!="add"&&tab!="settings")render()}
+    const li={};S.items.forEach(i=>{if(i.img)li[i.id]=i.img});S.items=a.map(({household,...r})=>({...r,img:r.img||li[r.id]||undefined}));S.codes={};b.forEach(c=>{if(c.code=="__cats__"){try{const j=JSON.parse(c.name);if(Array.isArray(j.cats)&&j.cats.length){S.cats=j.cats;S.ren=j.ren||{}}}catch(e){}}else S.codes[c.code]=c.name});if(!S.cats.includes("Other"))S.cats.push("Other");sync="live";save();if(tab!="add"&&tab!="settings")render()}
   catch(e){sync="error";render()}
 }
 function setHH(){
@@ -115,10 +122,23 @@ function setHH(){
 }
 function age(ts){const d=Math.floor((Date.now()-ts)/864e5);return d<1?"today":d<31?d+"d ago":Math.floor(d/30)+"mo ago"}
 const old=it=>Date.now()-it.added>60*864e5;
-function addItem(name,loc,n,code,cat){
+const EM={"Freezer easy food":"🧊","Meat & fish":"🥩","Dairy & eggs":"🧀","Fruit & veg":"🥦","Bread & bakery":"🍞","Pasta, rice & grains":"🍝","Tins & jars":"🥫","Condiments":"🧂","Snacks & sweets":"🍫","Drinks":"🥤","Other":"🍽️"};
+function emojiFor(c){for(const o in EM)if(resolve(o)==c)return EM[o];return"🍽️"}
+function thumb(i,sz){return`<div class="th ${sz||""}" onclick="pickFor('${i.id}')">${emojiFor(catOf(i))}${i.img?`<img src="${esc(i.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`:""}</div>`}
+let imgTarget=null;
+function pickFor(t){imgTarget=t;$("#ip").click()}
+function shrinkSq(f,sz=144){return new Promise((res,rej)=>{const im=new Image();im.onload=()=>{const m=Math.min(im.width,im.height),c=document.createElement("canvas");c.width=c.height=sz;
+  c.getContext("2d").drawImage(im,(im.width-m)/2,(im.height-m)/2,m,m,0,0,sz,sz);URL.revokeObjectURL(im.src);res(c.toDataURL("image/jpeg",.72))};im.onerror=rej;im.src=URL.createObjectURL(f)})}
+async function pickImg(inp){
+  const f=inp.files[0];inp.value="";if(!f)return;
+  try{const d=await shrinkSq(f);
+    if(imgTarget=="draft"){draft.img=d;render()}
+    else{const it=S.items.find(k=>k.id==imgTarget);if(it){it.img=d;put(it);render();toast("Photo saved")}}}
+  catch(e){toast("Couldn't read that photo")}}
+function addItem(name,loc,n,code,cat,img){
   name=name.trim();if(!name)return;
   let it=S.items.find(i=>i.name.toLowerCase()===name.toLowerCase()&&i.loc===loc);
-  if(it){it.qty+=n;if(!it.cat)it.cat=cat||guess(name)}else{it={cat:cat||guess(name),id:"i"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),name,loc,qty:n,added:Date.now()};S.items.push(it)}
+  if(it){it.qty+=n;if(!it.cat)it.cat=cat||guess(name);if(img&&!it.img)it.img=img}else{it={cat:cat||guess(name),img:img||(S.items.find(k=>k.img&&k.name.toLowerCase()===name.toLowerCase())||{}).img||undefined,id:"i"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),name,loc,qty:n,added:Date.now()};S.items.push(it)}
   put(it);if(code){S.codes[code]=name;putCode(code,name)}
   return it}
 function saveCats(){putCode("__cats__",JSON.stringify({cats:S.cats,ren:S.ren}))}
@@ -153,7 +173,7 @@ function vList(){
   if(!S.items.length)return`<div class="empty">Nothing here yet.</div>`;
   const by={};S.items.forEach(i=>{(by[catOf(i)]=by[catOf(i)]||[]).push(i)});
   return S.cats.filter(c=>by[c]).map(c=>{const a=by[c].sort((x,y)=>x.name.localeCompare(y.name));
-    return`<div class="cg">${esc(c)}<span>${a.reduce((t,i)=>t+i.qty,0)}</span></div><div class="card" style="padding:4px 14px">${a.map(i=>`<div class="li"><b>${esc(i.name)}</b><small>${i.loc} · ×${i.qty}</small></div>`).join("")}</div>`}).join("");
+    return`<div class="cg">${esc(c)}<span>${a.reduce((t,i)=>t+i.qty,0)}</span></div><div class="card" style="padding:4px 14px">${a.map(i=>`<div class="li" style="align-items:center"><span style="display:flex;align-items:center;gap:10px;min-width:0">${thumb(i,"s")}<b>${esc(i.name)}</b></span><small>${i.loc} · ×${i.qty}</small></div>`).join("")}</div>`}).join("");
 }
 function vSet(){
   const n=S.cats.length;
@@ -173,17 +193,18 @@ function vStock(){
   const list=S.items.filter(i=>(filter=="All"||i.loc==filter)&&(cfilter=="All"||catOf(i)==cfilter)).sort((a,b)=>a.added-b.added);
   const row=(arr,cur,v)=>`<div class="chips">${arr.map(l=>`<button class="chip ${cur==l?"on":""}" onclick="${v}='${l.replace(/'/g,"\\'")}';render()">${l}</button>`).join("")}</div>`;
   return row(["All",...LOCS],filter,"filter")+row(["All",...cats],cfilter,"cfilter")+`
-  <div class="card">${list.length?list.map(i=>`<div class="row"><div class="n"><div>${esc(i.name)}${old(i)?'<span class="tag">use soon</span>':""}</div><small>${i.loc} · added ${age(i.added)}</small><br><select class="cs" onchange="setCat('${i.id}',this.value)">${S.cats.map(c=>`<option ${c==catOf(i)?"selected":""}>${esc(c)}</option>`).join("")}</select></div><div class="q"><button onclick="change('${i.id}',-1)">−</button><span>${i.qty}</span><button onclick="change('${i.id}',1)">+</button></div></div>`).join(""):`<div class="empty">Nothing here.</div>`}</div>
+  <div class="card">${list.length?list.map(i=>`<div class="row">${thumb(i)}<div class="n"><div>${esc(i.name)}${old(i)?'<span class="tag">use soon</span>':""}</div><small>${i.loc} · added ${age(i.added)}</small><br><select class="cs" onchange="setCat('${i.id}',this.value)">${S.cats.map(c=>`<option ${c==catOf(i)?"selected":""}>${esc(c)}</option>`).join("")}</select></div><div class="q"><button onclick="change('${i.id}',-1)">−</button><span>${i.qty}</span><button onclick="change('${i.id}',1)">+</button></div></div>`).join(""):`<div class="empty">Nothing here.</div>`}</div>
   <div class="sub" style="text-align:center">Oldest first. Tap − when you use one; at 0 it's removed.</div>`;
 }
 function lastCard(){
   const it=S.items.find(i=>i.id==last);if(!it)return"";
-  return`<div class="card" style="border-color:var(--sage)"><div class="hint">✓ Added</div><div class="row" style="border:0;padding:4px 0"><div class="n"><div>${esc(it.name)}</div><small>${it.loc} · ${catOf(it)}</small></div><div class="q"><button onclick="change('${it.id}',-1)">−</button><span>${it.qty}</span><button onclick="change('${it.id}',1)">+</button></div></div><button class="btn" style="margin-top:8px" onclick="startScan()">📷 Scan next</button></div>`}
+  return`<div class="card" style="border-color:var(--sage)"><div class="hint">✓ Added</div><div class="row" style="border:0;padding:4px 0">${thumb(it)}<div class="n"><div>${esc(it.name)}</div><small>${it.loc} · ${catOf(it)}</small></div><div class="q"><button onclick="change('${it.id}',-1)">−</button><span>${it.qty}</span><button onclick="change('${it.id}',1)">+</button></div></div><button class="btn" style="margin-top:8px" onclick="startScan()">📷 Scan next</button></div>`}
 function vAdd(){
   return lastCard()+`<button class="btn" onclick="startScan()">📷 Scan barcode</button>
   <div class="card two" style="margin-top:10px;padding:10px"><input id="bc" inputmode="numeric" placeholder="…or type a barcode number"><button class="btn alt" onclick="found($('#bc').value.trim())">Look up</button></div>
   <div class="card">
   ${draft.hint?`<div class="hint">${draft.hint}</div>`:""}
+  <div class="pr"><div class="th l" onclick="pickFor('draft')">${draft.img?`<img src="${esc(draft.img)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">`:"📷"}</div><div><button class="btn alt" onclick="pickFor('draft')">${draft.img?"Change photo":"Add photo"}</button>${draft.img?`<button class="btn alt" style="margin-left:6px" onclick="draft.img='';render()">Remove</button>`:""}</div></div>
   <label>${draft.code?"Barcode "+esc(draft.code):"Item name"}</label>
   <input id="fn" value="${esc(draft.name)}" placeholder="e.g. Chicken thighs" oninput="draft.name=this.value" onchange="draft.name=this.value" onblur="draft.name=this.value" autocomplete="off">
   <label>How many</label>
@@ -197,22 +218,27 @@ function vAdd(){
 function submitAdd(){
   const fe=$("#fn");if(fe)draft.name=fe.value;
   if(!draft.name.trim()){toast("Give it a name first");return}
-  addItem(draft.name,draft.loc,draft.n,draft.code,draft.cat);toast("Added "+draft.name);
+  addItem(draft.name,draft.loc,draft.n,draft.code,draft.cat,draft.img);toast("Added "+draft.name);
   draft={name:"",loc:draft.loc,n:1,code:"",hint:""};render();
 }
 /* Barcode lookup: your saved names first, then Open Food Facts */
 async function off(code){
-  try{const r=await fetch("https://world.openfoodfacts.org/api/v2/product/"+enc(code)+".json?fields=product_name");
-    const j=await r.json();if(j.status==1&&j.product&&j.product.product_name)return j.product.product_name.trim()}catch(e){}
-  return"";
+  try{const r=await fetch("https://world.openfoodfacts.org/api/v2/product/"+enc(code)+".json?fields=product_name,image_front_small_url,image_front_url");
+    const j=await r.json();
+    if(j.status==1&&j.product){const pr=j.product;let img=pr.image_front_small_url||pr.image_front_url||"";if(img.startsWith("http:"))img="https:"+img.slice(5);
+      return{name:(pr.product_name||"").trim(),img}}}catch(e){}
+  return{name:"",img:""};
 }
 async function found(code){
   if(!code)return;stopScan();if(navigator.vibrate)navigator.vibrate(60);
   const loc=(draft&&draft.loc)||"Pantry";
-  let name=S.codes[code];
-  if(!name){toast("Looking it up…");name=await off(code)}
-  if(name){const it=addItem(name,loc,1,code);last=it.id;draft={name:"",loc,n:1,code:"",cat:"",hint:""};tab="add";render();scrollTo(0,0);return}
-  draft={name:"",loc,n:1,code,cat:"",hint:"Not in the database — name it once and it's saved"};
+  let name=S.codes[code],img="";
+  if(!name){toast("Looking it up…");const r=await off(code);name=r.name;img=r.img}
+  if(name){
+    const it=addItem(name,loc,1,code,"",img);last=it.id;draft={name:"",loc,n:1,code:"",cat:"",hint:""};tab="add";render();scrollTo(0,0);
+    if(!it.img)off(code).then(r=>{if(r.img&&!it.img){it.img=r.img;put(it);if(tab!="settings")render()}});
+    return}
+  draft={name:"",loc,n:1,code,cat:"",img,hint:"Not in the database — name it once and it's saved"};
   tab="add";render();
 }
 /* Scanner */
