@@ -40,8 +40,14 @@ label{font-size:13px;color:var(--mute);font-weight:600}
 .wrap{flex-wrap:wrap;overflow:visible}
 .th{position:relative;width:46px;height:46px;border-radius:12px;background:var(--chip);flex:none;display:flex;align-items:center;justify-content:center;font-size:22px;overflow:hidden;cursor:pointer}
 .th img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#fff}
+.th.gen{outline:2px dashed var(--line);outline-offset:-2px}
+.th.gen::after{content:"≈";position:absolute;right:1px;bottom:0;font-size:12px;line-height:1;background:var(--card);border-radius:6px;padding:1px 4px;color:var(--mute)}
 .th.s{width:38px;height:38px;font-size:18px;border-radius:10px}.th.l{width:64px;height:64px;font-size:30px;border-radius:14px}
 .pr{display:flex;align-items:center;gap:12px;margin-bottom:12px}.pr .btn{width:auto;padding:10px 14px;font-size:14px}
+.ov{position:fixed;inset:0;background:#0007;z-index:40;display:none;align-items:flex-end;justify-content:center}
+.sheet{background:var(--bg);width:100%;max-width:640px;border-radius:22px 22px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px));max-height:88vh;overflow:auto}
+.sheet h3{margin:0 0 4px;font-family:Georgia,serif}.sheet .btn{margin-top:8px;text-align:left}
+a.btn{display:block;text-decoration:none;box-sizing:border-box}
 .cg{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin:16px 4px 6px;display:flex;justify-content:space-between}
 .cg span{color:var(--mute);font-weight:600}
 .li{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}.li:last-child{border:0}
@@ -66,6 +72,7 @@ label{font-size:13px;color:var(--mute);font-weight:600}
 <nav class="nav" id="nav"></nav>
 <div id="scan"><video id="vid" playsinline muted></video><div class="frame"></div><div class="bar"><div id="smsg">Point at a barcode</div><button class="btn" style="margin-top:10px" onclick="$('#bp').click()">📸 Take a photo of the barcode instead</button><button class="btn alt" style="margin-top:8px" onclick="stopScan()">Cancel</button></div></div>
 <div id="toast"></div>
+<div class="ov" id="ps" onclick="if(event.target===this)closeSheet()"><div class="sheet" id="psb"></div></div>
 <input id="ip" type="file" accept="image/*" hidden onchange="pickImg(this)">
 <input id="bp" type="file" accept="image/*" capture="environment" hidden onchange="scanPhoto(this)">
 <script>
@@ -73,7 +80,7 @@ label{font-size:13px;color:var(--mute);font-weight:600}
 const SB_URL="https://nvvqyjsmbgsebcjdinrp.supabase.co";   // e.g. "https://abcdxyz.supabase.co"
 const SB_KEY="sb_publishable_6KNNQUXlvvl1XXTK9nTC_w_VgZxnodr";   // the "anon public" key
 /* ====================================================================== */
-const VER="v14";
+const VER="v16";
 const LOCS=["Freezer","Fridge","Pantry"];
 const DEFCATS=["Freezer easy food","Meat & fish","Dairy & eggs","Fruit & veg","Bread & bakery","Pasta, rice & grains","Tins & jars","Condiments","Snacks & sweets","Drinks","Other"];
 const KW=[["Freezer easy food","nugget|pie|pizza|lasagne|lasagna|dim sim|fish finger|spring roll|frozen meal|parmi|parmigiana|dumpling|hash brown|croquette|sausage roll|pastie|schnitzel|meal"],
@@ -91,7 +98,7 @@ function resolve(c){let k=0;while(S.ren[c]&&k++<10)c=S.ren[c];return c}
 function guess(n){n=n.toLowerCase();for(const[c,r]of KW)if(r.test(n))return c;return"Other"}
 function catOf(i){const c=resolve(i.cat||guess(i.name));return S.cats.includes(c)?c:"Other"}
 let cfilter="All",last=null;
-let S={items:[],codes:{},cats:[...DEFCATS],ren:{}},HH=localStorage.getItem("uiu_hh")||"findlay",sync="local",pend=0,tab="stock",filter="All",draft=null;
+let S={items:[],codes:{},cats:[...DEFCATS],ren:{},gcache:{},gen:true},HH=localStorage.getItem("uiu_hh")||"findlay",sync="local",pend=0,tab="stock",filter="All",draft=null;
 try{S=Object.assign(S,JSON.parse(localStorage.getItem("uiu")||"{}"))}catch(e){}
 const $=s=>document.querySelector(s),ON=()=>SB_URL&&SB_KEY&&HH,enc=encodeURIComponent;
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -124,16 +131,65 @@ function age(ts){const d=Math.floor((Date.now()-ts)/864e5);return d<1?"today":d<
 const old=it=>Date.now()-it.added>60*864e5;
 const EM={"Freezer easy food":"🧊","Meat & fish":"🥩","Dairy & eggs":"🧀","Fruit & veg":"🥦","Bread & bakery":"🍞","Pasta, rice & grains":"🍝","Tins & jars":"🥫","Condiments":"🧂","Snacks & sweets":"🍫","Drinks":"🥤","Other":"🍽️"};
 function emojiFor(c){for(const o in EM)if(resolve(o)==c)return EM[o];return"🍽️"}
-function thumb(i,sz){return`<div class="th ${sz||""}" onclick="pickFor('${i.id}')">${emojiFor(catOf(i))}${i.img?`<img src="${esc(i.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`:""}</div>`}
+const STOP=new Set("frozen fresh organic large small family pack value mini jumbo bag box tin can tinned canned packet".split(" "));
+function gkey(n){return String(n).toLowerCase().replace(/\d+(\.\d+)?\s*(kg|g|ml|l|pk|pack|x|oz|lb)?\b/g," ").replace(/[^a-z\s]/g," ").split(/\s+/).filter(w=>w&&!STOP.has(w)).slice(0,4).join(" ")}
+function gimg(i){return(!i.img&&S.gen!==false)?(S.gcache[gkey(i.name)]||""):""}
+function thumb(i,sz){const g=gimg(i),src=i.img||g;return`<div class="th ${sz||""} ${g?"gen":""}" onclick="pickFor('${i.id}')">${emojiFor(catOf(i))}${src?`<img src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`:""}</div>`}
+const gq=[],gbusy=new Set();let gtimer=null,grun=false;
+async function wiki(k){
+  try{const j=await (await fetch("https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch="+enc(k)+"&gsrlimit=4&gsrnamespace=0&prop=pageimages&piprop=thumbnail&pithumbsize=160&pilimit=4&format=json&origin=*")).json();
+    const pg=Object.values((j.query||{}).pages||{}).filter(x=>x.thumbnail&&x.thumbnail.source&&!/\.svg/i.test(x.thumbnail.source)).sort((a,b)=>a.index-b.index);
+    return pg.length?https(pg[0].thumbnail.source):""}catch(e){return null}
+}
+function ensureGeneric(){
+  if(S.gen===false)return;
+  S.items.forEach(i=>{if(i.img)return;const k=gkey(i.name);if(k&&!(k in S.gcache)&&!gbusy.has(k)){gbusy.add(k);gq.push(k)}});
+  if(grun||!gq.length)return;grun=true;
+  (async()=>{while(gq.length){const k=gq.shift();const u=await wiki(k);
+      if(u!==null){S.gcache[k]=u;save()}
+      gbusy.delete(k);clearTimeout(gtimer);gtimer=setTimeout(()=>{const a=document.activeElement;if(tab!="settings"&&!(a&&/INPUT|SELECT/.test(a.tagName)))render()},350);
+      await new Promise(r=>setTimeout(r,120))}
+    grun=false})()
+}
+function toggleGen(){S.gen=S.gen===false;save();if(S.gen)ensureGeneric();render()}
+function retryGen(){Object.keys(S.gcache).forEach(k=>{if(!S.gcache[k])delete S.gcache[k]});save();ensureGeneric();toast("Looking again…")}
 let imgTarget=null;
-function pickFor(t){imgTarget=t;$("#ip").click()}
+function pickFor(t){imgTarget=t;openSheet()}
+function curItem(){return imgTarget=="draft"?draft:S.items.find(k=>k.id==imgTarget)}
+function openSheet(){
+  const it=curItem();if(!it)return;const nm=(it.name||"").trim(),q=enc(nm||"");
+  $("#psb").innerHTML=`<h3>Photo${nm?" · "+esc(nm):""}</h3><div class="sub" style="margin:0 0 6px">Pick where the picture comes from.</div>
+  <button class="btn alt" onclick="$('#ip').click()">📸 Take or choose a photo</button>
+  <a class="btn alt" href="https://www.woolworths.com.au/shop/search/products?searchTerm=${q}" target="_blank" rel="noopener">🔎 Find it on Woolworths ↗</a>
+  <a class="btn alt" href="https://www.coles.com.au/search/products?q=${q}" target="_blank" rel="noopener">🔎 Find it on Coles ↗</a>
+  <button class="btn alt" onclick="linkImg()">🔗 Paste a Woolworths product link</button>
+  <button class="btn alt" onclick="pasteImg()">📋 Paste a copied photo (Woolworths or Coles)</button>
+  ${it.img?`<button class="btn alt" onclick="setImg('')">🗑️ Remove photo</button>`:""}
+  <button class="btn" style="text-align:center" onclick="closeSheet()">Close</button>
+  <div class="sub" style="margin:10px 0 0">Tip: open the product on the store's site, then either copy the page link (Woolworths) or touch and hold the product photo and tap Copy, come back here and paste.</div>`;
+  $("#ps").style.display="flex"}
+function closeSheet(){$("#ps").style.display="none"}
+function setImg(u){const it=curItem();if(!it)return;
+  if(imgTarget=="draft"){it.img=u||"";}else{it.img=u||undefined;put(it)}
+  closeSheet();render();toast(u?"Photo saved":"Photo removed")}
+function linkImg(){
+  const v=(prompt("Paste the product page link (open the product on woolworths.com.au and copy the address):")||"").trim();if(!v)return;
+  const m=v.match(/woolworths\.com\.au\/shop\/productdetails\/(\d+)/i);
+  if(m)return setImg("https://cdn0.woolworths.media/content/wowproductimages/medium/"+m[1]+".jpg");
+  if(/coles\.com\.au/i.test(v)){toast("Coles links can't be turned into a photo — touch and hold the photo on the Coles page, tap Copy, then use Paste a copied photo.");return}
+  if(/^https:\/\/\S+\.(jpg|jpeg|png|webp)(\?\S*)?$/i.test(v))return setImg(v);
+  toast("That doesn't look like a Woolworths product link")}
+async function pasteImg(){
+  try{const list=await navigator.clipboard.read();
+    for(const c of list){const t=c.types.find(x=>x.startsWith("image/"));if(t){const d=await shrinkSq(await c.getType(t));return setImg(d)}}
+    toast("No photo copied yet — touch and hold the product photo on the website, tap Copy, then try again")}
+  catch(e){toast("Couldn't paste — copy the product photo first, and allow Paste if asked")}}
 function shrinkSq(f,sz=144){return new Promise((res,rej)=>{const im=new Image();im.onload=()=>{const m=Math.min(im.width,im.height),c=document.createElement("canvas");c.width=c.height=sz;
   c.getContext("2d").drawImage(im,(im.width-m)/2,(im.height-m)/2,m,m,0,0,sz,sz);URL.revokeObjectURL(im.src);res(c.toDataURL("image/jpeg",.72))};im.onerror=rej;im.src=URL.createObjectURL(f)})}
 async function pickImg(inp){
   const f=inp.files[0];inp.value="";if(!f)return;
   try{const d=await shrinkSq(f);
-    if(imgTarget=="draft"){draft.img=d;render()}
-    else{const it=S.items.find(k=>k.id==imgTarget);if(it){it.img=d;put(it);render();toast("Photo saved")}}}
+    setImg(d)}
   catch(e){toast("Couldn't read that photo")}}
 function addItem(name,loc,n,code,cat,img){
   name=name.trim();if(!name)return;
@@ -167,6 +223,7 @@ function render(){
   $("#sub").textContent=(S.items.length?S.items.reduce((a,i)=>a+i.qty,0)+" items · "+S.items.filter(old).length+" sitting 2+ months":"Know what you have. Cook what you've got.")+" · "+st+" · "+VER;
   $("#nav").innerHTML=[["stock","🧊","Stock"],["list","📋","List"],["add","➕","Add"],["recipes","🍳","Cook"]].map(([k,e,l])=>`<button class="${tab==k?"on":""}" onclick="go('${k}')"><b>${e}</b>${l}</button>`).join("");
   $("#app").innerHTML=tab=="stock"?vStock():tab=="list"?vList():tab=="settings"?vSet():tab=="add"?vAdd():vRec();
+  ensureGeneric();
 }
 function go(t){tab=t;if(t=="add"&&!draft)draft={name:"",loc:"Pantry",n:1,code:"",hint:""};render();scrollTo(0,0)}
 function vList(){
@@ -184,6 +241,8 @@ function vSet(){
   <div class="card"><label>Photos</label>
   <div class="sub" style="margin:2px 0 10px">Looks up the real product photo from its barcode for items that don't have one yet. Items added without a barcode need your own photo — tap their picture.</div>
   <button class="btn alt" onclick="fillImages()">🖼️ Find photos for items without one</button>
+  <button class="btn alt" style="margin-top:8px" onclick="toggleGen()">${S.gen!==false?"✓ Stand-in photos on":"Stand-in photos off"}</button>${S.gen!==false?`<button class="btn alt" style="margin-top:8px" onclick="retryGen()">Retry missing stand-ins</button>`:""}
+  <div class="sub" style="margin:8px 0 0">≈ marks a stand-in picture of that type of food from Wikipedia, used when there's no photo from the barcode. Your own photos and barcode photos always win.</div>
   <div class="sub" id="fp" style="margin:8px 0 0"></div></div>
   <div class="card"><label>Categories</label><div class="sub" style="margin:2px 0 10px">Rename, reorder or delete. Changes sync to every phone.</div>
   ${S.cats.map((c,i)=>`<div class="ce"><button ${i==0?"disabled":""} onclick="moveCat(${i},-1)">↑</button><button ${i==n-1?"disabled":""} onclick="moveCat(${i},1)">↓</button><input value="${esc(c)}" ${c=="Other"?"disabled":""} onchange="renameCat(${i},this.value)"><button class="x" ${c=="Other"?"disabled":""} onclick="delCat(${i})">✕</button></div>`).join("")}
@@ -202,7 +261,7 @@ function vStock(){
 }
 function lastCard(){
   const it=S.items.find(i=>i.id==last);if(!it)return"";
-  return`<div class="card" style="border-color:var(--sage)"><div class="hint">✓ Added</div><div class="row" style="border:0;padding:4px 0">${thumb(it)}<div class="n"><div>${esc(it.name)}</div><small>${it.loc} · ${catOf(it)}</small></div><div class="q"><button onclick="change('${it.id}',-1)">−</button><span>${it.qty}</span><button onclick="change('${it.id}',1)">+</button></div></div>${it.img?"":`<div class="sub" style="margin:6px 0 0">${busy.has(it.id)?"Looking for a photo…":"No photo found for this barcode — tap the picture to take your own."}</div>`}<button class="btn" style="margin-top:8px" onclick="startScan()">📷 Scan next</button></div>`}
+  return`<div class="card" style="border-color:var(--sage)"><div class="hint">✓ Added</div><div class="row" style="border:0;padding:4px 0">${thumb(it)}<div class="n"><div>${esc(it.name)}</div><small>${it.loc} · ${catOf(it)}</small></div><div class="q"><button onclick="change('${it.id}',-1)">−</button><span>${it.qty}</span><button onclick="change('${it.id}',1)">+</button></div></div>${it.img?"":`<div class="sub" style="margin:6px 0 0">${busy.has(it.id)?"Looking for a photo…":gimg(it)?"≈ Stand-in photo of this type of food — tap it to take your own.":"No photo found for this barcode — tap the picture to take your own."}</div>`}<button class="btn" style="margin-top:8px" onclick="startScan()">📷 Scan next</button></div>`}
 function vAdd(){
   return lastCard()+`<button class="btn" onclick="startScan()">📷 Scan barcode</button>
   <div class="card two" style="margin-top:10px;padding:10px"><input id="bc" inputmode="numeric" placeholder="…or type a barcode number"><button class="btn alt" onclick="found($('#bc').value.trim())">Look up</button></div>
