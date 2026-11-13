@@ -46,7 +46,7 @@ label{font-size:13px;color:var(--mute);font-weight:600}
 .pr{display:flex;align-items:center;gap:12px;margin-bottom:12px}.pr .btn{width:auto;padding:10px 14px;font-size:14px}
 .ov{position:fixed;inset:0;background:#0007;z-index:40;display:none;align-items:flex-end;justify-content:center}
 .sheet{background:var(--bg);width:100%;max-width:640px;border-radius:22px 22px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px));max-height:88vh;overflow:auto}
-.sheet h3{margin:0 0 4px;font-family:Georgia,serif}.sheet .btn{margin-top:8px;text-align:left}
+.sgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.sg1{background:#fff;border-radius:12px;padding:6px;text-align:center;font-size:10px;color:var(--mut,#777);cursor:pointer}.sg1 img{width:100%;height:80px;object-fit:contain}.sg1 span{display:block;line-height:1.2;max-height:2.4em;overflow:hidden}.sheet h3{margin:0 0 4px;font-family:Georgia,serif}.sheet .btn{margin-top:8px;text-align:left}
 a.btn{display:block;text-decoration:none;box-sizing:border-box}
 .cg{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin:16px 4px 6px;display:flex;justify-content:space-between}
 .cg span{color:var(--mute);font-weight:600}
@@ -80,7 +80,7 @@ a.btn{display:block;text-decoration:none;box-sizing:border-box}
 const SB_URL="https://nvvqyjsmbgsebcjdinrp.supabase.co";   // e.g. "https://abcdxyz.supabase.co"
 const SB_KEY="sb_publishable_6KNNQUXlvvl1XXTK9nTC_w_VgZxnodr";   // the "anon public" key
 /* ====================================================================== */
-const VER="v17";
+const VER="v18";
 const LOCS=["Freezer","Fridge","Pantry"];
 const DEFCATS=["Freezer easy food","Meat & fish","Dairy & eggs","Fruit & veg","Bread & bakery","Pasta, rice & grains","Tins & jars","Condiments","Snacks & sweets","Drinks","Other"];
 const KW=[["Freezer easy food","nugget|pie|pizza|lasagne|lasagna|dim sim|fish finger|spring roll|frozen meal|parmi|parmigiana|dumpling|hash brown|croquette|sausage roll|pastie|schnitzel|meal"],
@@ -190,27 +190,57 @@ function pickFor(t){imgTarget=t;openSheet()}
 function curItem(){return imgTarget=="draft"?draft:S.items.find(k=>k.id==imgTarget)}
 function openSheet(){
   const it=curItem();if(!it)return;const nm=(it.name||"").trim(),q=enc(nm||"");
-  $("#psb").innerHTML=`<h3>Photo${nm?" · "+esc(nm):""}</h3><div class="sub" style="margin:0 0 6px">Pick where the picture comes from.</div>
-  <button class="btn alt" onclick="$('#ip').click()">📸 Take or choose a photo</button>
-  <a class="btn alt" href="https://www.woolworths.com.au/shop/search/products?searchTerm=${q}" target="_blank" rel="noopener">🔎 Find it on Woolworths ↗</a>
-  <a class="btn alt" href="https://www.coles.com.au/search/products?q=${q}" target="_blank" rel="noopener">🔎 Find it on Coles ↗</a>
-  <button class="btn alt" onclick="linkImg()">🔗 Paste a Woolworths product link</button>
-  <button class="btn alt" onclick="pasteImg()">📋 Paste a copied photo (Woolworths or Coles)</button>
+  $("#psb").innerHTML=`<h3>Photo${nm?" · "+esc(nm):""}</h3>
+  <div class="sub" style="margin:0 0 6px">Paste a Coles or Woolworths product link and the photo is fetched for you.</div>
+  <div style="display:flex;gap:6px"><input id="lk" placeholder="Paste product link here" inputmode="url" autocomplete="off" style="flex:1;min-width:0;margin:0" oninput="linkIn(this.value)"><button class="btn alt" style="margin:0;width:auto" onclick="clipLink()">📋 Paste</button></div>
+  <div id="lkm" class="sub" style="margin:4px 0 0"></div>
+  <div class="sub" style="margin:10px 0 4px"><b>Suggestions</b> — tap the right one</div>
+  <div id="sg" class="sgrid"><div class="sub">Looking…</div></div>
+  <a class="btn alt" href="https://www.coles.com.au/search/products?q=${q}" target="_blank" rel="noopener">🔎 Open Coles search ↗</a>
+  <a class="btn alt" href="https://www.woolworths.com.au/shop/search/products?searchTerm=${q}" target="_blank" rel="noopener">🔎 Open Woolworths search ↗</a>
+  <button class="btn alt" onclick="$('#ip').click()">📸 Take or choose my own photo</button>
+  <button class="btn alt" onclick="pasteImg()">🖼️ Paste a copied photo</button>
   ${it.img?`<button class="btn alt" onclick="setImg('')">🗑️ Remove photo</button>`:""}
   <button class="btn" style="text-align:center" onclick="closeSheet()">Close</button>
-  <div class="sub" style="margin:10px 0 0">Tip: open the product on the store's site, then either copy the page link (Woolworths) or touch and hold the product photo and tap Copy, come back here and paste.</div>`;
-  $("#ps").style.display="flex"}
+  <div class="sub" style="margin:10px 0 0">Tip: on the store's site open the product, copy the page address, then come back and tap Paste.</div>`;
+  $("#ps").style.display="flex";suggest(nm,imgTarget)}
+const sgTok={};
+async function suggest(nm,tok){
+  const el=()=>imgTarget==tok&&$("#sg");
+  const key=gkey(nm)||nm;
+  if(!key){el()&&(el().innerHTML='<div class="sub">Type a name first to get suggestions.</div>');return}
+  let res=[];
+  const q=async extra=>{try{const j=await (await fetch("https://world.openfoodfacts.org/cgi/search.pl?search_terms="+enc(key)+"&search_simple=1&action=process&json=1&page_size=14&fields=product_name,brands,image_front_small_url,image_front_url"+extra)).json();
+    return(j.products||[]).map(x=>({u:https(x.image_front_small_url||x.image_front_url||""),t:[x.brands,x.product_name].filter(Boolean).join(" · ")})).filter(x=>x.u)}catch(e){return[]}};
+  res=await q("&tagtype_0=countries&tag_contains_0=contains&tag_0=australia");
+  if(res.length<6){const more=await q("");more.forEach(m=>{if(!res.some(r=>r.u==m.u))res.push(m)})}
+  const w=await wiki(key);if(w)res.push({u:w,t:"General photo (not this exact product)"});
+  res=res.slice(0,12);
+  const box=el();if(!box)return;
+  box.innerHTML=res.length?res.map((r,i)=>`<div class="sg1" onclick="prevImg(sgList[${i}].u)"><img src="${esc(r.u)}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.parentNode.remove()"><span>${esc(r.t.slice(0,40))}</span></div>`).join(""):'<div class="sub">No suggestions found — paste a link or use your own photo.</div>';
+  window.sgList=res}
+function prevImg(u,note){
+  $("#psb").innerHTML=`<h3>Is this the right photo?</h3><div style="text-align:center;margin:10px 0"><img id="pv" src="${esc(u)}" alt="" referrerpolicy="no-referrer" style="width:180px;height:180px;object-fit:contain;border-radius:16px;background:#fff" onerror="pvErr()"></div>${note?`<div class="sub">${esc(note)}</div>`:""}
+  <button id="pvok" class="btn" style="text-align:center" onclick="usePrev()">✅ Use this photo</button>
+  <button class="btn alt" style="text-align:center" onclick="openSheet()">↩︎ Try another</button>`;
+  window.prevUrl=u}
+async function pvErr(){const i=$('#pv');if(i)i.outerHTML='<div class="sub">That picture couldn’t be loaded — try another.</div>';const b=$('#pvok');if(b)b.disabled=true}
+async function usePrev(){const u=window.prevUrl;try{const r=await fetch(u,{referrerPolicy:"no-referrer"});if(r.ok){const d=await shrinkSq(await r.blob());return setImg(d)}}catch(e){}setImg(u)}
+function linkToImg(v){
+  v=(v||"").trim();
+  let m=v.match(/woolworths\.com\.au\/shop\/productdetails\/(\d+)/i);
+  if(m)return"https://cdn0.woolworths.media/content/wowproductimages/large/"+m[1]+".jpg";
+  m=v.match(/coles\.com\.au\/product\/[^?#\s]*?-(\d{4,})(?:[/?#]|$)/i);
+  if(m)return"https://productimages.coles.com.au/productimages/"+m[1][0]+"/"+m[1]+".jpg";
+  if(/^https:\/\/\S+\.(jpg|jpeg|png|webp)(\?\S*)?$/i.test(v))return v;
+  return""}
+function linkIn(v){v=v.trim();if(!v)return;const u=linkToImg(v);
+  if(u)return prevImg(u);const m=$("#lkm");if(m)m.textContent=/^https?:\/\//i.test(v)?"I can't get a photo from that link — it needs to be a Coles or Woolworths product page.":""}
+async function clipLink(){try{const t=await navigator.clipboard.readText();const i=$("#lk");if(i)i.value=t;linkIn(t)}catch(e){const m=$("#lkm");if(m)m.textContent="Tap in the box above, hold, and choose Paste."}}
 function closeSheet(){$("#ps").style.display="none"}
 function setImg(u){const it=curItem();if(!it)return;
   if(imgTarget=="draft"){it.img=u||"";}else{it.img=u||undefined;put(it)}
   closeSheet();render();toast(u?"Photo saved":"Photo removed")}
-function linkImg(){
-  const v=(prompt("Paste the product page link (open the product on woolworths.com.au and copy the address):")||"").trim();if(!v)return;
-  const m=v.match(/woolworths\.com\.au\/shop\/productdetails\/(\d+)/i);
-  if(m)return setImg("https://cdn0.woolworths.media/content/wowproductimages/medium/"+m[1]+".jpg");
-  if(/coles\.com\.au/i.test(v)){toast("Coles links can't be turned into a photo — touch and hold the photo on the Coles page, tap Copy, then use Paste a copied photo.");return}
-  if(/^https:\/\/\S+\.(jpg|jpeg|png|webp)(\?\S*)?$/i.test(v))return setImg(v);
-  toast("That doesn't look like a Woolworths product link")}
 async function pasteImg(){
   try{const list=await navigator.clipboard.read();
     for(const c of list){const t=c.types.find(x=>x.startsWith("image/"));if(t){const d=await shrinkSq(await c.getType(t));return setImg(d)}}
