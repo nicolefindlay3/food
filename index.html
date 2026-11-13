@@ -46,7 +46,7 @@ label{font-size:13px;color:var(--mute);font-weight:600}
 .pr{display:flex;align-items:center;gap:12px;margin-bottom:12px}.pr .btn{width:auto;padding:10px 14px;font-size:14px}
 .ov{position:fixed;inset:0;background:#0007;z-index:40;display:none;align-items:flex-end;justify-content:center}
 .sheet{background:var(--bg);width:100%;max-width:640px;border-radius:22px 22px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px));max-height:88vh;overflow:auto}
-.sgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.sg1{background:#fff;border-radius:12px;padding:6px;text-align:center;font-size:10px;color:var(--mut,#777);cursor:pointer}.sg1 img{width:100%;height:80px;object-fit:contain}.sg1 span{display:block;line-height:1.2;max-height:2.4em;overflow:hidden}.sheet h3{margin:0 0 4px;font-family:Georgia,serif}.sheet .btn{margin-top:8px;text-align:left}
+.sgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.sg1{background:#fff;border-radius:12px;padding:6px;text-align:center;font-size:10px;color:var(--mut,#777);cursor:pointer}.sg1 img{width:100%;height:80px;object-fit:contain}.sg1 span{display:block;line-height:1.2;max-height:2.4em;overflow:hidden}.pen{font-size:12px;opacity:.45;cursor:pointer}.sheet h3{margin:0 0 4px;font-family:Georgia,serif}.sheet .btn{margin-top:8px;text-align:left}
 a.btn{display:block;text-decoration:none;box-sizing:border-box}
 .cg{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin:16px 4px 6px;display:flex;justify-content:space-between}
 .cg span{color:var(--mute);font-weight:600}
@@ -80,7 +80,7 @@ a.btn{display:block;text-decoration:none;box-sizing:border-box}
 const SB_URL="https://nvvqyjsmbgsebcjdinrp.supabase.co";   // e.g. "https://abcdxyz.supabase.co"
 const SB_KEY="sb_publishable_6KNNQUXlvvl1XXTK9nTC_w_VgZxnodr";   // the "anon public" key
 /* ====================================================================== */
-const VER="v18";
+const VER="v19";
 const LOCS=["Freezer","Fridge","Pantry"];
 const DEFCATS=["Freezer easy food","Meat & fish","Dairy & eggs","Fruit & veg","Bread & bakery","Pasta, rice & grains","Tins & jars","Condiments","Snacks & sweets","Drinks","Other"];
 const KW=[["Freezer easy food","nugget|pie|pizza|lasagne|lasagna|dim sim|fish finger|spring roll|frozen meal|parmi|parmigiana|dumpling|hash brown|croquette|sausage roll|pastie|schnitzel|meal"],
@@ -277,6 +277,9 @@ function delCat(i){
   if(!confirm(n?`Delete “${c}”? ${n} item${n>1?"s":""} will move to Other.`:`Delete “${c}”?`))return;
   S.items.forEach(it=>{if(catOf(it)==c){it.cat="Other";put(it)}});
   S.cats.splice(i,1);saveCats();render()}
+function rename(id){const it=S.items.find(i=>i.id==id);if(!it)return;const v=(prompt("Rename item:",it.name)||"").trim();if(!v||v==it.name)return;
+  const code=Object.keys(S.codes).find(c=>String(S.codes[c]).toLowerCase()==it.name.toLowerCase());
+  it.name=v;put(it);if(code){S.codes[code]=v;putCode(code,v)}render();toast("Renamed")}
 function setCat(id,c){const it=S.items.find(i=>i.id==id);if(!it)return;it.cat=c;put(it);render()}
 function change(id,d,q){const it=S.items.find(i=>i.id==id);if(!it)return;it.qty+=d;
   if(it.qty<=0){S.items=S.items.filter(i=>i.id!=id);if(last==id)last=null;del(id);if(!q)toast(it.name+" used up ✓")}else put(it);if(!q)render()}
@@ -295,7 +298,7 @@ function vList(){
   if(!S.items.length)return`<div class="empty">Nothing here yet.</div>`;
   const by={};S.items.forEach(i=>{(by[catOf(i)]=by[catOf(i)]||[]).push(i)});
   return S.cats.filter(c=>by[c]).map(c=>{const a=by[c].sort((x,y)=>x.name.localeCompare(y.name));
-    return`<div class="cg">${esc(c)}<span>${a.reduce((t,i)=>t+i.qty,0)}</span></div><div class="card" style="padding:4px 14px">${a.map(i=>`<div class="li" style="align-items:center"><span style="display:flex;align-items:center;gap:10px;min-width:0">${thumb(i,"s")}<b>${esc(i.name)}</b></span><small>${i.loc} · ×${i.qty}</small></div>`).join("")}</div>`}).join("");
+    return`<div class="cg">${esc(c)}<span>${a.reduce((t,i)=>t+i.qty,0)}</span></div><div class="card" style="padding:4px 14px">${a.map(i=>`<div class="li" style="align-items:center"><span style="display:flex;align-items:center;gap:10px;min-width:0">${thumb(i,"s")}<b onclick="rename('${i.id}')">${esc(i.name)} <span class="pen">✎</span></b></span><small>${i.loc} · ×${i.qty}</small></div>`).join("")}</div>`}).join("");
 }
 function vSet(){
   const n=S.cats.length;
@@ -326,12 +329,12 @@ function vStock(){
   const list=S.items.filter(i=>(filter=="All"||i.loc==filter)&&(cfilter=="All"||catOf(i)==cfilter)).sort((a,b)=>a.added-b.added);
   const row=(arr,cur,v)=>`<div class="chips">${arr.map(l=>`<button class="chip ${cur==l?"on":""}" onclick="${v}='${l.replace(/'/g,"\\'")}';render()">${l}</button>`).join("")}</div>`;
   return row(["All",...LOCS],filter,"filter")+row(["All",...cats],cfilter,"cfilter")+`
-  <div class="card">${list.length?list.map(i=>`<div class="row">${thumb(i)}<div class="n"><div>${esc(i.name)}${old(i)?'<span class="tag">use soon</span>':""}</div><small>${i.loc} · added ${age(i.added)}</small><br><select class="cs" onchange="setCat('${i.id}',this.value)">${S.cats.map(c=>`<option ${c==catOf(i)?"selected":""}>${esc(c)}</option>`).join("")}</select></div><div class="q"><button onclick="change('${i.id}',-1)">−</button><span>${i.qty}</span><button onclick="change('${i.id}',1)">+</button></div></div>`).join(""):`<div class="empty">Nothing here.</div>`}</div>
+  <div class="card">${list.length?list.map(i=>`<div class="row">${thumb(i)}<div class="n"><div onclick="rename('${i.id}')">${esc(i.name)} <span class="pen">✎</span>${old(i)?'<span class="tag">use soon</span>':""}</div><small>${i.loc} · added ${age(i.added)}</small><br><select class="cs" onchange="setCat('${i.id}',this.value)">${S.cats.map(c=>`<option ${c==catOf(i)?"selected":""}>${esc(c)}</option>`).join("")}</select></div><div class="q"><button onclick="change('${i.id}',-1)">−</button><span>${i.qty}</span><button onclick="change('${i.id}',1)">+</button></div></div>`).join(""):`<div class="empty">Nothing here.</div>`}</div>
   <div class="sub" style="text-align:center">Oldest first. Tap − when you use one; at 0 it's removed.</div>`;
 }
 function lastCard(){
   const it=S.items.find(i=>i.id==last);if(!it)return"";
-  return`<div class="card" style="border-color:var(--sage)"><div class="hint">✓ Added</div><div class="row" style="border:0;padding:4px 0">${thumb(it)}<div class="n"><div>${esc(it.name)}</div><small>${it.loc} · ${catOf(it)}</small></div><div class="q"><button onclick="change('${it.id}',-1)">−</button><span>${it.qty}</span><button onclick="change('${it.id}',1)">+</button></div></div>${it.img?"":`<div class="sub" style="margin:6px 0 0">${busy.has(it.id)?"Looking for a photo…":gimg(it)?"≈ Stand-in photo of this type of food — tap it to take your own.":"No photo found for this barcode — tap the picture to take your own."}</div>`}<button class="btn" style="margin-top:8px" onclick="startScan()">📷 Scan next</button></div>`}
+  return`<div class="card" style="border-color:var(--sage)"><div class="hint">✓ Added</div><div class="row" style="border:0;padding:4px 0">${thumb(it)}<div class="n"><div onclick="rename('${it.id}')">${esc(it.name)} <span class="pen">✎</span></div><small>${it.loc} · ${catOf(it)}</small></div><div class="q"><button onclick="change('${it.id}',-1)">−</button><span>${it.qty}</span><button onclick="change('${it.id}',1)">+</button></div></div>${it.img?"":`<div class="sub" style="margin:6px 0 0">${busy.has(it.id)?"Looking for a photo…":gimg(it)?"≈ Stand-in photo of this type of food — tap it to take your own.":"No photo found for this barcode — tap the picture to take your own."}</div>`}<button class="btn" style="margin-top:8px" onclick="startScan()">📷 Scan next</button></div>`}
 function vAdd(){
   return lastCard()+`<button class="btn" onclick="startScan()">📷 Scan barcode</button>
   <div class="card two" style="margin-top:10px;padding:10px"><input id="bc" inputmode="numeric" placeholder="…or type a barcode number"><button class="btn alt" onclick="found($('#bc').value.trim())">Look up</button></div>
