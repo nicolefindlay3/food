@@ -80,7 +80,7 @@ a.btn{display:block;text-decoration:none;box-sizing:border-box}
 const SB_URL="https://nvvqyjsmbgsebcjdinrp.supabase.co";   // e.g. "https://abcdxyz.supabase.co"
 const SB_KEY="sb_publishable_6KNNQUXlvvl1XXTK9nTC_w_VgZxnodr";   // the "anon public" key
 /* ====================================================================== */
-const VER="v16";
+const VER="v17";
 const LOCS=["Freezer","Fridge","Pantry"];
 const DEFCATS=["Freezer easy food","Meat & fish","Dairy & eggs","Fruit & veg","Bread & bakery","Pasta, rice & grains","Tins & jars","Condiments","Snacks & sweets","Drinks","Other"];
 const KW=[["Freezer easy food","nugget|pie|pizza|lasagne|lasagna|dim sim|fish finger|spring roll|frozen meal|parmi|parmigiana|dumpling|hash brown|croquette|sausage roll|pastie|schnitzel|meal"],
@@ -98,7 +98,7 @@ function resolve(c){let k=0;while(S.ren[c]&&k++<10)c=S.ren[c];return c}
 function guess(n){n=n.toLowerCase();for(const[c,r]of KW)if(r.test(n))return c;return"Other"}
 function catOf(i){const c=resolve(i.cat||guess(i.name));return S.cats.includes(c)?c:"Other"}
 let cfilter="All",last=null;
-let S={items:[],codes:{},cats:[...DEFCATS],ren:{},gcache:{},gen:true},HH=localStorage.getItem("uiu_hh")||"findlay",sync="local",pend=0,tab="stock",filter="All",draft=null;
+let S={items:[],codes:{},cats:[...DEFCATS],ren:{},gcache:{},gen:true,dirty:{}},HH=localStorage.getItem("uiu_hh")||"findlay",sync="local",pend=0,tab="stock",filter="All",draft=null;
 try{S=Object.assign(S,JSON.parse(localStorage.getItem("uiu")||"{}"))}catch(e){}
 const $=s=>document.querySelector(s),ON=()=>SB_URL&&SB_KEY&&HH,enc=encodeURIComponent;
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -108,19 +108,51 @@ async function sb(path,o={}){const r=await fetch(SB_URL+"/rest/v1/"+path,{...o,h
   if(!r.ok)throw new Error(r.status);const t=await r.text();return t?JSON.parse(t):null}
 function w(p){pend++;return p.catch(()=>{sync="error";render()}).finally(()=>pend--)}
 const UP={method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=minimal"}};
-function put(it){save();if(!ON())return;
-  const send=o=>sb("pantry_items?on_conflict=id",{...UP,body:JSON.stringify({...o,household:HH})});
-  w(send(it).catch(e=>{if(it.img){const{img,...r}=it;return send(r)}throw e}))}
-function del(id){save();ON()&&w(sb("pantry_items?id=eq."+enc(id)+"&household=eq."+enc(HH),{method:"DELETE"}))}
-function putCode(c,n){save();ON()&&w(sb("pantry_codes?on_conflict=household,code",{...UP,body:JSON.stringify({household:HH,code:c,name:n})}))}
+let seq=0;
+function mark(k,extra){S.dirty[k]={n:++seq,...extra};save();return S.dirty[k].n}
+function clearIf(k,n){if(S.dirty[k]&&S.dirty[k].n===n){delete S.dirty[k];save()}}
+const sendItem=o=>sb("pantry_items?on_conflict=id",{...UP,body:JSON.stringify({...o,household:HH})});
+const sendCode=(c,n)=>sb("pantry_codes?on_conflict=household,code",{...UP,body:JSON.stringify({household:HH,code:c,name:n})});
+const sendDel=id=>sb("pantry_items?id=eq."+enc(id)+"&household=eq."+enc(HH),{method:"DELETE"});
+function put(it){const key="i:"+it.id,n=mark(key,{k:"put"});if(!ON())return;
+  w(sendItem(it).catch(e=>{if(it.img){const{img,...r}=it;return sendItem(r)}throw e}).then(()=>clearIf(key,n)))}
+function del(id){const key="i:"+id,n=mark(key,{k:"del"});if(!ON())return;w(sendDel(id).then(()=>clearIf(key,n)))}
+function putCode(c,nm){const key="c:"+c,n=mark(key,{k:"code",name:nm});if(!ON())return;w(sendCode(c,nm).then(()=>clearIf(key,n)))}
+async function flushDirty(){
+  await Promise.all(Object.keys(S.dirty).map(async key=>{const d=S.dirty[key],n=d.n;
+    try{
+      if(d.k=="put"){const it=S.items.find(x=>"i:"+x.id==key);if(!it){clearIf(key,n);return}
+        try{await sendItem(it)}catch(e){if(it.img){const{img,...r}=it;await sendItem(r)}else throw e}}
+      else if(d.k=="del")await sendDel(key.slice(2));
+      else if(d.k=="code")await sendCode(key.slice(2),d.name);
+      clearIf(key,n)}catch(e){}}))
+}
+function getBak(){try{return JSON.parse(localStorage.getItem("uiu_bak")||"null")}catch(e){return null}}
+function restoreBak(){const b=getBak();if(!b)return;let n=0;
+  b.items.forEach(i=>{if(!S.items.some(x=>x.id==i.id)){S.items.push(i);put(i);n++}});
+  try{localStorage.removeItem("uiu_bak")}catch(e){}toast("Restored "+n+" item"+(n==1?"":"s"));render()}
+function exportBackup(){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify({saved:new Date().toISOString(),items:S.items,cats:S.cats,codes:S.codes},null,1)],{type:"application/json"}));
+  a.download="pantry-backup-"+new Date().toISOString().slice(0,10)+".json";document.body.appendChild(a);a.click();a.remove()}
 async function pull(){
   if(!ON()||pend)return;
-  try{const [a,b]=await Promise.all([sb("pantry_items?household=eq."+enc(HH)+"&order=added.asc"),sb("pantry_codes?household=eq."+enc(HH))]);
+  try{
+    await flushDirty();
+    const [a,b]=await Promise.all([sb("pantry_items?household=eq."+enc(HH)+"&order=added.asc"),sb("pantry_codes?household=eq."+enc(HH))]);
     const mk="uiu_mig_"+HH;
     if(!a.length&&S.items.length&&!localStorage.getItem(mk)){localStorage.setItem(mk,1);S.items.forEach(put);Object.entries(S.codes).forEach(([c,n])=>putCode(c,n));sync="live";render();return}
     localStorage.setItem(mk,1);
-    const li={};S.items.forEach(i=>{if(i.img)li[i.id]=i.img});S.items=a.map(({household,...r})=>({...r,img:r.img||li[r.id]||undefined}));S.codes={};b.forEach(c=>{if(c.code=="__cats__"){try{const j=JSON.parse(c.name);if(Array.isArray(j.cats)&&j.cats.length){S.cats=j.cats;S.ren=j.ren||{}}}catch(e){}}else S.codes[c.code]=c.name});if(!S.cats.includes("Other"))S.cats.push("Other");sync="live";save();if(tab!="add"&&tab!="settings")render()}
-  catch(e){sync="error";render()}
+    const D=S.dirty,local={},li={};S.items.forEach(i=>{local[i.id]=i;if(i.img)li[i.id]=i.img});
+    let items=a.map(({household,...r})=>r).filter(r=>!(D["i:"+r.id]&&D["i:"+r.id].k=="del"))
+      .map(r=>{const d=D["i:"+r.id];return d&&d.k=="put"&&local[r.id]?local[r.id]:{...r,img:r.img||li[r.id]||undefined}});
+    Object.keys(D).forEach(key=>{if(D[key].k=="put"){const id=key.slice(2);if(local[id]&&!items.some(x=>x.id==id))items.push(local[id])}});
+    const missing=S.items.filter(i=>!items.some(x=>x.id==i.id)),ob=getBak();
+    if(missing.length&&(!ob||missing.length>=ob.items.length))try{localStorage.setItem("uiu_bak",JSON.stringify({t:Date.now(),items:missing}))}catch(e){}
+    S.items=items;
+    const nc={};b.forEach(c=>{if(c.code=="__cats__"){if(!D["c:__cats__"])try{const j=JSON.parse(c.name);if(Array.isArray(j.cats)&&j.cats.length){S.cats=j.cats;S.ren=j.ren||{}}}catch(e){}}else nc[c.code]=c.name});
+    Object.keys(D).forEach(k=>{if(D[k].k=="code"&&k!="c:__cats__")nc[k.slice(2)]=D[k].name});S.codes=nc;
+    if(!S.cats.includes("Other"))S.cats.push("Other");
+    sync="live";save();if(tab!="add"&&tab!="settings")render();else setSub()}
+  catch(e){sync="error";setSub();if(tab!="add"&&tab!="settings")render()}
 }
 function setHH(){
   if(!SB_URL||!SB_KEY){alert("Sync isn't set up yet. Add your Supabase URL and anon key at the top of this file.");return}
@@ -218,9 +250,12 @@ function delCat(i){
 function setCat(id,c){const it=S.items.find(i=>i.id==id);if(!it)return;it.cat=c;put(it);render()}
 function change(id,d,q){const it=S.items.find(i=>i.id==id);if(!it)return;it.qty+=d;
   if(it.qty<=0){S.items=S.items.filter(i=>i.id!=id);if(last==id)last=null;del(id);if(!q)toast(it.name+" used up ✓")}else put(it);if(!q)render()}
-function render(){
-  const st=!SB_URL?"this device only (sync not set up)":!HH?"tap ⚙️ to turn on sync":sync=="live"?"☁️ synced":sync=="error"?"offline — will retry":"connecting…";
+function setSub(){
+  const st=!SB_URL?"this device only (sync not set up)":!HH?"tap ⚙️ to turn on sync":(()=>{const nd=Object.keys(S.dirty).length;return nd?"⚠️ "+nd+" change"+(nd==1?"":"s")+" not saved to the cloud yet — will retry":sync=="live"?"☁️ synced":sync=="error"?"offline — will retry":"connecting…"})();
   $("#sub").textContent=(S.items.length?S.items.reduce((a,i)=>a+i.qty,0)+" items · "+S.items.filter(old).length+" sitting 2+ months":"Know what you have. Cook what you've got.")+" · "+st+" · "+VER;
+}
+function render(){
+  setSub();
   $("#nav").innerHTML=[["stock","🧊","Stock"],["list","📋","List"],["add","➕","Add"],["recipes","🍳","Cook"]].map(([k,e,l])=>`<button class="${tab==k?"on":""}" onclick="go('${k}')"><b>${e}</b>${l}</button>`).join("");
   $("#app").innerHTML=tab=="stock"?vStock():tab=="list"?vList():tab=="settings"?vSet():tab=="add"?vAdd():vRec();
   ensureGeneric();
@@ -244,6 +279,11 @@ function vSet(){
   <button class="btn alt" style="margin-top:8px" onclick="toggleGen()">${S.gen!==false?"✓ Stand-in photos on":"Stand-in photos off"}</button>${S.gen!==false?`<button class="btn alt" style="margin-top:8px" onclick="retryGen()">Retry missing stand-ins</button>`:""}
   <div class="sub" style="margin:8px 0 0">≈ marks a stand-in picture of that type of food from Wikipedia, used when there's no photo from the barcode. Your own photos and barcode photos always win.</div>
   <div class="sub" id="fp" style="margin:8px 0 0"></div></div>
+  ${getBak()?`<div class="card" style="border-color:var(--accent)"><label>Items that disappeared</label>
+  <div class="sub" style="margin:2px 0 10px">${getBak().items.length} item${getBak().items.length==1?"":"s"} on this phone weren't on the cloud copy at the last sync (saved ${new Date(getBak().t).toLocaleString()}).</div>
+  <button class="btn" onclick="restoreBak()">Put them back</button></div>`:""}
+  <div class="card"><label>Backup</label><div class="sub" style="margin:2px 0 10px">Saves a copy of your list to this phone as a file.</div>
+  <button class="btn alt" onclick="exportBackup()">⬇️ Save a backup file</button></div>
   <div class="card"><label>Categories</label><div class="sub" style="margin:2px 0 10px">Rename, reorder or delete. Changes sync to every phone.</div>
   ${S.cats.map((c,i)=>`<div class="ce"><button ${i==0?"disabled":""} onclick="moveCat(${i},-1)">↑</button><button ${i==n-1?"disabled":""} onclick="moveCat(${i},1)">↓</button><input value="${esc(c)}" ${c=="Other"?"disabled":""} onchange="renameCat(${i},this.value)"><button class="x" ${c=="Other"?"disabled":""} onclick="delCat(${i})">✕</button></div>`).join("")}
   <label style="display:block;margin-top:14px">New category</label>
