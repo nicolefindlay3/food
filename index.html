@@ -80,7 +80,7 @@ a.btn{display:block;text-decoration:none;box-sizing:border-box}
 const SB_URL="https://nvvqyjsmbgsebcjdinrp.supabase.co";   // e.g. "https://abcdxyz.supabase.co"
 const SB_KEY="sb_publishable_6KNNQUXlvvl1XXTK9nTC_w_VgZxnodr";   // the "anon public" key
 /* ====================================================================== */
-const VER="v19";
+const VER="v20";
 const LOCS=["Freezer","Fridge","Pantry"];
 const DEFCATS=["Freezer easy food","Meat & fish","Dairy & eggs","Fruit & veg","Bread & bakery","Pasta, rice & grains","Tins & jars","Condiments","Snacks & sweets","Drinks","Other"];
 const KW=[["Freezer easy food","nugget|pie|pizza|lasagne|lasagna|dim sim|fish finger|spring roll|frozen meal|parmi|parmigiana|dumpling|hash brown|croquette|sausage roll|pastie|schnitzel|meal"],
@@ -194,7 +194,7 @@ function openSheet(){
   <div class="sub" style="margin:0 0 6px">Paste a Coles or Woolworths product link and the photo is fetched for you.</div>
   <div style="display:flex;gap:6px"><input id="lk" placeholder="Paste product link here" inputmode="url" autocomplete="off" style="flex:1;min-width:0;margin:0" oninput="linkIn(this.value)"><button class="btn alt" style="margin:0;width:auto" onclick="clipLink()">📋 Paste</button></div>
   <div id="lkm" class="sub" style="margin:4px 0 0"></div>
-  <div class="sub" style="margin:10px 0 4px"><b>Suggestions</b> — tap the right one</div>
+  <div class="sub" style="margin:10px 0 4px"><b>Suggestions</b> from Coles &amp; Woolworths — tap one to use it</div>
   <div id="sg" class="sgrid"><div class="sub">Looking…</div></div>
   <a class="btn alt" href="https://www.coles.com.au/search/products?q=${q}" target="_blank" rel="noopener">🔎 Open Coles search ↗</a>
   <a class="btn alt" href="https://www.woolworths.com.au/shop/search/products?searchTerm=${q}" target="_blank" rel="noopener">🔎 Open Woolworths search ↗</a>
@@ -210,22 +210,26 @@ async function suggest(nm,tok){
   const key=gkey(nm)||nm;
   if(!key){el()&&(el().innerHTML='<div class="sub">Type a name first to get suggestions.</div>');return}
   let res=[];
+  try{const ac=new AbortController();setTimeout(()=>ac.abort(),9000);const r=await fetch(SB_URL+"/functions/v1/store-search?q="+enc(key),{headers:{apikey:SB_KEY,Authorization:"Bearer "+SB_KEY},signal:ac.signal});
+    if(r.ok){const j=await r.json();res=(j.items||[]).map(x=>({u:x.u,t:x.s+" · "+x.t}))}}catch(e){}
   const q=async extra=>{try{const j=await (await fetch("https://world.openfoodfacts.org/cgi/search.pl?search_terms="+enc(key)+"&search_simple=1&action=process&json=1&page_size=14&fields=product_name,brands,image_front_small_url,image_front_url"+extra)).json();
     return(j.products||[]).map(x=>({u:https(x.image_front_small_url||x.image_front_url||""),t:[x.brands,x.product_name].filter(Boolean).join(" · ")})).filter(x=>x.u)}catch(e){return[]}};
-  res=await q("&tagtype_0=countries&tag_contains_0=contains&tag_0=australia");
-  if(res.length<6){const more=await q("");more.forEach(m=>{if(!res.some(r=>r.u==m.u))res.push(m)})}
+  (await q("&tagtype_0=countries&tag_contains_0=contains&tag_0=australia")).forEach(m=>{if(!res.some(r=>r.u==m.u))res.push(m)});
+  if(res.length<8){const more=await q("");more.forEach(m=>{if(!res.some(r=>r.u==m.u))res.push(m)})}
   const w=await wiki(key);if(w)res.push({u:w,t:"General photo (not this exact product)"});
-  res=res.slice(0,12);
+  res=res.slice(0,16);
   const box=el();if(!box)return;
-  box.innerHTML=res.length?res.map((r,i)=>`<div class="sg1" onclick="prevImg(sgList[${i}].u)"><img src="${esc(r.u)}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.parentNode.remove()"><span>${esc(r.t.slice(0,40))}</span></div>`).join(""):'<div class="sub">No suggestions found — paste a link or use your own photo.</div>';
+  box.innerHTML=res.length?res.map((r,i)=>`<div class="sg1" onclick="useSug(${i})"><img src="${esc(r.u)}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.parentNode.remove()"><span>${esc(r.t.slice(0,40))}</span></div>`).join(""):'<div class="sub">No suggestions found — paste a link or use your own photo.</div>';
   window.sgList=res}
+function useSug(i){const u=(window.sgList||[])[i];if(u)useUrl(u.u)}
+async function useUrl(u){try{const r=await fetch(u,{referrerPolicy:"no-referrer"});if(r.ok)return setImg(await shrinkSq(await r.blob()))}catch(e){}setImg(u)}
 function prevImg(u,note){
   $("#psb").innerHTML=`<h3>Is this the right photo?</h3><div style="text-align:center;margin:10px 0"><img id="pv" src="${esc(u)}" alt="" referrerpolicy="no-referrer" style="width:180px;height:180px;object-fit:contain;border-radius:16px;background:#fff" onerror="pvErr()"></div>${note?`<div class="sub">${esc(note)}</div>`:""}
   <button id="pvok" class="btn" style="text-align:center" onclick="usePrev()">✅ Use this photo</button>
   <button class="btn alt" style="text-align:center" onclick="openSheet()">↩︎ Try another</button>`;
   window.prevUrl=u}
 async function pvErr(){const i=$('#pv');if(i)i.outerHTML='<div class="sub">That picture couldn’t be loaded — try another.</div>';const b=$('#pvok');if(b)b.disabled=true}
-async function usePrev(){const u=window.prevUrl;try{const r=await fetch(u,{referrerPolicy:"no-referrer"});if(r.ok){const d=await shrinkSq(await r.blob());return setImg(d)}}catch(e){}setImg(u)}
+function usePrev(){useUrl(window.prevUrl)}
 function linkToImg(v){
   v=(v||"").trim();
   let m=v.match(/woolworths\.com\.au\/shop\/productdetails\/(\d+)/i);
